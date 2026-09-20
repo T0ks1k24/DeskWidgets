@@ -1,0 +1,21 @@
+# DeskWidgets: lets the logged-in user read the battery of wireless gaming mice that report it
+# only over a vendor HID protocol (Pulsar, Kysona, ATK, VXE and others on Compx/CX chips).
+#
+# Access is given only to the receiver's vendor interface (interface 01) of the listed MOUSE
+# receivers. Keyboard receivers are deliberately not listed: their interfaces carry typing.
+# Add your mouse with a line like the ones below (vendor/product from `lsusb`).
+#
+# All ATTRS{} in one rule must match the same sysfs device, but vendor/product live on the USB
+# device and the interface number lives on its interface. So the usb_id builtin first copies
+# them into ID_VENDOR_ID / ID_MODEL_ID / ID_USB_INTERFACE_NUM.
+
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="379a|3554|373b", IMPORT{builtin}="usb_id"
+
+# Pulsar 3 / X3 series wireless receiver (Compx)
+SUBSYSTEM=="hidraw", ENV{ID_VENDOR_ID}=="379a", ENV{ID_MODEL_ID}=="3907", ENV{ID_USB_INTERFACE_NUM}=="01", TAG+="uaccess"
+# Pulsar X2 V2 / X2H / X2A / Xlite V3: wired, 1 kHz and 4 kHz receivers
+SUBSYSTEM=="hidraw", ENV{ID_VENDOR_ID}=="3554", ENV{ID_MODEL_ID}=="f507|f508|f509", ENV{ID_USB_INTERFACE_NUM}=="01", TAG+="uaccess"
+# Kysona M600, VXE Dragonfly R1 Pro (receiver and wired), ATK VXE R1 SE+ (wired)
+SUBSYSTEM=="hidraw", ENV{ID_VENDOR_ID}=="3554", ENV{ID_MODEL_ID}=="f57c|f57d|f58a|f58c|f58f", ENV{ID_USB_INTERFACE_NUM}=="01", TAG+="uaccess"
+# ATK VXE R1 SE+ receiver
+SUBSYSTEM=="hidraw", ENV{ID_VENDOR_ID}=="373b", ENV{ID_MODEL_ID}=="1085", ENV{ID_USB_INTERFACE_NUM}=="01", TAG+="uaccess"
