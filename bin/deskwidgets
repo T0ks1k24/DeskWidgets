@@ -1,0 +1,15 @@
+#!/usr/bin/python3
+"""DeskWidgets launcher. Finds the package next to it (source checkout) or in
+<prefix>/share/deskwidgets (installed) and runs the CLI."""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+for candidate in (os.path.join(HERE, '..'), os.path.join(HERE, '..', 'share', 'deskwidgets')):
+    if os.path.isfile(os.path.join(candidate, 'deskwidgets', '__init__.py')):
+        sys.path.insert(0, os.path.abspath(candidate))
+        break
+
+from deskwidgets.cli import main  # noqa: E402
+
+sys.exit(main())
