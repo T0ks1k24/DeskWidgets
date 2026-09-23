@@ -1,0 +1,16 @@
+{
+  "id": "clock",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "time",
+  "name": {"uk": "Годинник", "en": "Clock"},
+  "description": {"uk": "Аналоговий годинник у стилі Apple Watch", "en": "Analog clock in the Apple Watch style"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 10,
+  "fast_if": "seconds",
+  "color_accent": "orange",
+  "options": [
+    {"key": "seconds", "type": "bool", "default": true, "label": {"uk": "Секундна стрілка", "en": "Second hand"}},
+    {"key": "numbers", "type": "bool", "default": true, "label": {"uk": "Цифри на циферблаті", "en": "Numbers on the dial"}}
+  ]
+}

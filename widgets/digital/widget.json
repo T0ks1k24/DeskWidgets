@@ -1,0 +1,17 @@
+{
+  "id": "digital",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "time",
+  "name": {"uk": "Цифровий годинник", "en": "Digital clock"},
+  "description": {"uk": "Великий час і дата", "en": "Big time and date"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 5,
+  "fast_if": "seconds",
+  "color_accent": "indigo",
+  "options": [
+    {"key": "seconds", "type": "bool", "default": false, "label": {"uk": "Секунди", "en": "Seconds"}},
+    {"key": "date", "type": "bool", "default": true, "label": {"uk": "Дата", "en": "Date"}},
+    {"key": "h12", "type": "bool", "default": false, "label": {"uk": "12-годинний формат", "en": "12-hour format"}}
+  ]
+}
