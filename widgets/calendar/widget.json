@@ -1,0 +1,16 @@
+{
+  "id": "calendar",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "time",
+  "name": {"uk": "Календар", "en": "Calendar"},
+  "description": {"uk": "Сьогодні, тиждень або цілий місяць; дні з подіями позначені крапкою",
+                  "en": "Today, the week or the whole month; days with events get a dot"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 30,
+  "color_accent": "red",
+  "uses": ["events"],
+  "options": [
+    {"key": "week_numbers", "type": "bool", "default": true, "label": {"uk": "Номер тижня", "en": "Week number"}}
+  ]
+}

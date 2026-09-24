@@ -1,0 +1,34 @@
+{
+  "id": "worldclock",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "time",
+  "name": {"uk": "Світовий час", "en": "World clock"},
+  "description": {"uk": "Час у кількох містах", "en": "Time in several cities"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 10,
+  "color_accent": "teal",
+  "options": [
+    {"key": "zones", "type": "multi", "limit": 4, "default": "Europe/Kyiv,Europe/London,America/New_York,Asia/Tokyo",
+     "label": {"uk": "Міста", "en": "Cities"},
+     "choices": [
+       {"value": "Europe/Kyiv", "label": {"uk": "Київ", "en": "Kyiv"}},
+       {"value": "Europe/Warsaw", "label": {"uk": "Варшава", "en": "Warsaw"}},
+       {"value": "Europe/Berlin", "label": {"uk": "Берлін", "en": "Berlin"}},
+       {"value": "Europe/London", "label": {"uk": "Лондон", "en": "London"}},
+       {"value": "Europe/Paris", "label": {"uk": "Париж", "en": "Paris"}},
+       {"value": "Europe/Istanbul", "label": {"uk": "Стамбул", "en": "Istanbul"}},
+       {"value": "Asia/Dubai", "label": {"uk": "Дубай", "en": "Dubai"}},
+       {"value": "Asia/Kolkata", "label": {"uk": "Делі", "en": "Delhi"}},
+       {"value": "Asia/Shanghai", "label": {"uk": "Пекін", "en": "Beijing"}},
+       {"value": "Asia/Seoul", "label": {"uk": "Сеул", "en": "Seoul"}},
+       {"value": "Asia/Tokyo", "label": {"uk": "Токіо", "en": "Tokyo"}},
+       {"value": "Australia/Sydney", "label": {"uk": "Сідней", "en": "Sydney"}},
+       {"value": "America/New_York", "label": {"uk": "Нью-Йорк", "en": "New York"}},
+       {"value": "America/Toronto", "label": {"uk": "Торонто", "en": "Toronto"}},
+       {"value": "America/Chicago", "label": {"uk": "Чикаго", "en": "Chicago"}},
+       {"value": "America/Los_Angeles", "label": {"uk": "Лос-Анджелес", "en": "Los Angeles"}},
+       {"value": "America/Sao_Paulo", "label": {"uk": "Сан-Паулу", "en": "São Paulo"}}
+     ]}
+  ]
+}
