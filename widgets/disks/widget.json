@@ -1,0 +1,12 @@
+{
+  "id": "disks",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "system",
+  "name": {"uk": "Диски", "en": "Disks"},
+  "description": {"uk": "Заповненість розділів", "en": "How full your partitions are"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 30,
+  "color_accent": "green",
+  "options": []
+}

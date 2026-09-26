@@ -1,0 +1,12 @@
+{
+  "id": "memory",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "system",
+  "name": {"uk": "Пам’ять", "en": "Memory"},
+  "description": {"uk": "Оперативна пам’ять і своп", "en": "RAM and swap"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 5,
+  "color_accent": "blue",
+  "options": []
+}

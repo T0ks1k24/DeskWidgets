@@ -1,0 +1,12 @@
+{
+  "id": "system",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "system",
+  "name": {"uk": "Система", "en": "System"},
+  "description": {"uk": "Процесор, пам’ять, диск і температура", "en": "CPU, memory, disk and temperature"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 2,
+  "color_accent": "pink",
+  "options": []
+}

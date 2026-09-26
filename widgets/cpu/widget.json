@@ -1,0 +1,12 @@
+{
+  "id": "cpu",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "system",
+  "name": {"uk": "Процесор", "en": "Processor"},
+  "description": {"uk": "Навантаження ядер і найактивніші процеси", "en": "Per-core load and the busiest processes"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 2,
+  "color_accent": "pink",
+  "options": []
+}
