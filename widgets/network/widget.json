@@ -1,0 +1,18 @@
+{
+  "id": "network",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "system",
+  "name": {"uk": "Мережа", "en": "Network"},
+  "description": {"uk": "Швидкість, графік трафіку і невідомі пристрої в мережі",
+                  "en": "Speed, traffic graph and unknown devices on your network"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 1,
+  "color_accent": "teal",
+  "options": [
+    {"key": "lan", "type": "bool", "default": false,
+     "label": {"uk": "Шукати невідомі пристрої в мережі (nmap, раз на хвилину)", "en": "Watch for unknown devices on the LAN (nmap, once a minute)"},
+     "hint": {"uk": "Відомі пристрої: ~/.config/deskwidgets/network_known.txt (рядок «mac|назва»)",
+              "en": "Known devices: ~/.config/deskwidgets/network_known.txt (one \"mac|name\" per line)"}}
+  ]
+}
