@@ -1,0 +1,21 @@
+{
+  "id": "weather",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "info",
+  "name": {"uk": "Погода", "en": "Weather"},
+  "description": {"uk": "Зараз, погодинно і на 3 дні (wttr.in)", "en": "Now, hourly and 3 days ahead (wttr.in)"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 10,
+  "color_accent": "blue",
+  "options": [
+    {"key": "city", "type": "text", "default": "Kyiv",
+     "label": {"uk": "Місто латиницею (для wttr.in)", "en": "City (as wttr.in understands it)"},
+     "hint": {"uk": "Наприклад: Lviv, Lutsk, Warsaw", "en": "For example: Lviv, Berlin, Tokyo"}},
+    {"key": "title", "type": "text", "default": "",
+     "label": {"uk": "Назва на картці", "en": "Name on the card"},
+     "hint": {"uk": "Порожньо — як у полі «Місто»", "en": "Empty — same as the city"}},
+    {"key": "sky", "type": "bool", "default": true,
+     "label": {"uk": "Колір неба на картці (у стилях Скло/Графіт/Світлий)", "en": "Sky colours on the card (Glass/Graphite/Light)"}}
+  ]
+}
