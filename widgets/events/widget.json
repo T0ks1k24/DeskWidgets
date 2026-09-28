@@ -1,0 +1,14 @@
+{
+  "id": "events",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "info",
+  "name": {"uk": "Події", "en": "Up next"},
+  "description": {"uk": "Найближчі події з календарів GNOME (Evolution Data Server)",
+                  "en": "Upcoming events from your GNOME calendars (Evolution Data Server)"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 5,
+  "color_accent": "red",
+  "uses": ["events"],
+  "options": []
+}

@@ -1,0 +1,14 @@
+{
+  "id": "media",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "info",
+  "name": {"uk": "Зараз грає", "en": "Now playing"},
+  "description": {"uk": "Трек, обкладинка і прогрес з будь-якого плеєра; клік — пауза",
+                  "en": "Track, cover art and progress from any player; click to pause"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 1,
+  "color_accent": "pink",
+  "uses": ["media"],
+  "options": []
+}
