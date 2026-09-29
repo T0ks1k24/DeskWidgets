@@ -1,0 +1,13 @@
+{
+  "id": "battery",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "system",
+  "name": {"uk": "Батарея", "en": "Batteries"},
+  "description": {"uk": "Заряд ноутбука, Bluetooth-пристроїв і бездротових ігрових мишей", "en": "Laptop, Bluetooth device and wireless gaming mouse charge"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 10,
+  "color_accent": "green",
+  "uses": ["hid-batteries"],
+  "options": []
+}
