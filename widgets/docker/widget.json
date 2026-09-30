@@ -1,0 +1,14 @@
+{
+  "id": "docker",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "system",
+  "name": {"uk": "Docker", "en": "Docker"},
+  "description": {"uk": "Контейнери і їхній стан", "en": "Containers and their state"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 10,
+  "color_accent": "blue",
+  "options": [
+    {"key": "all", "type": "bool", "default": true, "label": {"uk": "Показувати й зупинені", "en": "Show stopped containers too"}}
+  ]
+}
