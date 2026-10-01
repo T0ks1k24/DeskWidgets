@@ -1,0 +1,22 @@
+{
+  "id": "picture",
+  "version": "1.0",
+  "author": "DeskWidgets",
+  "category": "personal",
+  "name": {"uk": "Картинка", "en": "Picture"},
+  "description": {"uk": "Ваш арт, фото чи улюблений персонаж на робочому столі",
+                  "en": "Your art, a photo or a favourite character on the desktop"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 60,
+  "color_accent": "purple",
+  "options": [
+    {"key": "image", "type": "file", "default": "", "label": {"uk": "Картинка", "en": "Picture"},
+     "hint": {"uk": "PNG, JPG, WebP…", "en": "PNG, JPG, WebP…"}},
+    {"key": "caption", "type": "text", "default": "", "label": {"uk": "Підпис", "en": "Caption"}},
+    {"key": "fit", "type": "choice", "default": "cover", "label": {"uk": "Як вписати", "en": "Fit"},
+     "choices": [
+       {"value": "cover", "label": {"uk": "Заповнити картку", "en": "Fill the card"}},
+       {"value": "contain", "label": {"uk": "Показати повністю", "en": "Show it all"}}
+     ]}
+  ]
+}

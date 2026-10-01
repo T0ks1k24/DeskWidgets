@@ -1,0 +1,21 @@
+{
+  "id": "note",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "personal",
+  "name": {"uk": "Нотатка", "en": "Note"},
+  "description": {"uk": "Ваш текст на робочому столі", "en": "Your own text on the desktop"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 60,
+  "style": "color",
+  "accent": "yellow",
+  "color_accent": "yellow",
+  "options": [
+    {"key": "title", "type": "text", "default": {"uk": "Нотатка", "en": "Note"}, "label": {"uk": "Заголовок", "en": "Title"}},
+    {"key": "text", "type": "longtext",
+     "default": {"uk": "Клацніть правою кнопкою, щоб змінити текст цієї нотатки.", "en": "Right-click to change the text of this note."},
+     "label": {"uk": "Текст", "en": "Text"}},
+    {"key": "font_size", "type": "number", "default": 0, "min": 0, "max": 28, "step": 0.5,
+     "label": {"uk": "Розмір шрифту (0 — автоматично)", "en": "Font size (0 — automatic)"}}
+  ]
+}

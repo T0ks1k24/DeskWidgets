@@ -1,0 +1,18 @@
+{
+  "id": "countdown",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "personal",
+  "name": {"uk": "Відлік", "en": "Countdown"},
+  "description": {"uk": "Скільки днів до важливої дати", "en": "Days left until an important date"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 60,
+  "color_accent": "orange",
+  "options": [
+    {"key": "title", "type": "text", "default": {"uk": "Новий рік", "en": "New Year"}, "label": {"uk": "Назва", "en": "Title"}},
+    {"key": "date", "type": "date", "default": "", "label": {"uk": "Дата (РРРР-ММ-ДД)", "en": "Date (YYYY-MM-DD)"},
+     "hint": {"uk": "Порожньо — 1 січня наступного року", "en": "Empty — January 1 of next year"}},
+    {"key": "since", "type": "date", "default": "", "label": {"uk": "Початок відліку (для смужки прогресу)", "en": "Start date (for the progress bar)"},
+     "hint": {"uk": "Необов’язково", "en": "Optional"}}
+  ]
+}
