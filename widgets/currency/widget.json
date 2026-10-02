@@ -1,0 +1,27 @@
+{
+  "id": "currency",
+  "version": "2.0",
+  "author": "DeskWidgets",
+  "category": "info",
+  "name": {"uk": "Курс НБУ", "en": "Hryvnia rates (NBU)"},
+  "description": {"uk": "Офіційний курс гривні і зміна за день", "en": "Official UAH exchange rates and the daily change"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 30,
+  "color_accent": "green",
+  "options": [
+    {"key": "codes", "type": "multi", "limit": 7, "default": "USD,EUR,PLN",
+     "label": {"uk": "Валюти", "en": "Currencies"},
+     "choices": [
+       {"value": "USD", "label": {"uk": "USD — долар США", "en": "USD — US dollar"}},
+       {"value": "EUR", "label": {"uk": "EUR — євро", "en": "EUR — euro"}},
+       {"value": "PLN", "label": {"uk": "PLN — злотий", "en": "PLN — złoty"}},
+       {"value": "GBP", "label": {"uk": "GBP — фунт стерлінгів", "en": "GBP — pound sterling"}},
+       {"value": "CHF", "label": {"uk": "CHF — швейцарський франк", "en": "CHF — Swiss franc"}},
+       {"value": "CZK", "label": {"uk": "CZK — чеська крона", "en": "CZK — Czech koruna"}},
+       {"value": "CAD", "label": {"uk": "CAD — канадський долар", "en": "CAD — Canadian dollar"}},
+       {"value": "JPY", "label": {"uk": "JPY — єна", "en": "JPY — yen"}},
+       {"value": "CNY", "label": {"uk": "CNY — юань", "en": "CNY — yuan"}},
+       {"value": "TRY", "label": {"uk": "TRY — турецька ліра", "en": "TRY — Turkish lira"}}
+     ]}
+  ]
+}
