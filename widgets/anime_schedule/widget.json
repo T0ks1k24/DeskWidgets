@@ -1,0 +1,28 @@
+{
+  "id": "anime_schedule",
+  "version": "1.0",
+  "author": "DeskWidgets",
+  "category": "anime",
+  "name": {"uk": "Аніме: нові серії", "en": "Anime: next episodes"},
+  "description": {"uk": "Коли вийде наступна серія — онгоінги, твій список AniList або тренди; клік відкриває AniList",
+                  "en": "When the next episode airs — current shows, your AniList list or trending; click opens AniList"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 10,
+  "style": "sakura",
+  "color_accent": "pink",
+  "options": [
+    {"key": "mode", "type": "choice", "default": "airing", "label": {"uk": "Що показувати", "en": "Show"},
+     "choices": [
+       {"value": "airing", "label": {"uk": "Популярні онгоінги", "en": "Popular airing shows"}},
+       {"value": "list", "label": {"uk": "Мій список «Дивлюся» на AniList", "en": "My AniList “Watching” list"}},
+       {"value": "trending", "label": {"uk": "Тренди", "en": "Trending"}}
+     ]},
+    {"key": "username", "type": "text", "default": "", "label": {"uk": "Нік на AniList (для «Мій список»)", "en": "AniList username (for “My list”)"}},
+    {"key": "title_lang", "type": "choice", "default": "romaji", "label": {"uk": "Назви", "en": "Titles"},
+     "choices": [
+       {"value": "romaji", "label": {"uk": "Ромадзі", "en": "Romaji"}},
+       {"value": "english", "label": {"uk": "Англійські", "en": "English"}},
+       {"value": "native", "label": {"uk": "Японські", "en": "Japanese"}}
+     ]}
+  ]
+}

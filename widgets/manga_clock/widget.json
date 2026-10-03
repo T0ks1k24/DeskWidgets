@@ -1,0 +1,19 @@
+{
+  "id": "manga_clock",
+  "version": "1.0",
+  "author": "DeskWidgets",
+  "category": "anime",
+  "name": {"uk": "Манґа-годинник", "en": "Manga clock"},
+  "description": {"uk": "Час як панель манґи: товсті цифри, кандзі дня тижня і звуковий ефект",
+                  "en": "Time as a manga panel: bold inked digits, the weekday in kanji and a sound effect"},
+  "sizes": ["small", "medium", "large"],
+  "interval": 5,
+  "fast_if": "seconds",
+  "style": "manga",
+  "color_accent": "red",
+  "options": [
+    {"key": "seconds", "type": "bool", "default": false, "label": {"uk": "Секунди", "en": "Seconds"}},
+    {"key": "sfx", "type": "text", "default": "チクタク", "label": {"uk": "Звуковий ефект", "en": "Sound effect"},
+     "hint": {"uk": "Наприклад: ドキドキ, ゴゴゴ, BOOM", "en": "For example: ドキドキ, ゴゴゴ, BOOM"}}
+  ]
+}

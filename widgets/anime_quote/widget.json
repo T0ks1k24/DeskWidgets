@@ -1,0 +1,23 @@
+{
+  "id": "anime_quote",
+  "version": "1.0",
+  "author": "DeskWidgets",
+  "category": "anime",
+  "name": {"uk": "Аніме-фраза", "en": "Anime buddy"},
+  "description": {"uk": "Персонаж вітається японською і підбадьорює фразою в бабблі; фрази й картинка — ваші",
+                  "en": "A character greets you in Japanese and cheers you on in a speech bubble; your own phrases and picture"},
+  "sizes": ["medium", "small", "large"],
+  "interval": 30,
+  "style": "sakura",
+  "color_accent": "pink",
+  "options": [
+    {"key": "name", "type": "text", "default": {"uk": "Сенсей", "en": "Sensei"}, "label": {"uk": "Ім’я персонажа", "en": "Character name"}},
+    {"key": "image", "type": "file", "default": "", "label": {"uk": "Картинка персонажа", "en": "Character picture"},
+     "hint": {"uk": "PNG або JPG; порожньо — аватар-смайлик", "en": "PNG or JPG; empty — a smiley avatar"}},
+    {"key": "phrases", "type": "longtext", "default": "",
+     "label": {"uk": "Свої фрази (по одній у рядку)", "en": "Your phrases (one per line)"},
+     "hint": {"uk": "Порожньо — вбудовані фрази", "en": "Empty — the built-in ones"}},
+    {"key": "every", "type": "number", "default": 30, "min": 1, "max": 1440, "step": 1,
+     "label": {"uk": "Нова фраза кожні … хв", "en": "New phrase every … min"}}
+  ]
+}
