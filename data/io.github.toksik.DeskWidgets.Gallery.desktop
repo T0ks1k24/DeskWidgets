@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=DeskWidgets
+Name[uk]=Віджети
+Comment=Add, configure and arrange desktop widgets
+Comment[uk]=Додати, налаштувати й розставити віджети робочого столу
+Exec=deskwidgets gallery
+Icon=io.github.toksik.DeskWidgets
+Categories=Utility;GTK;
+Keywords=widgets;conky;desktop;clock;weather;anime;віджети;годинник;погода;аніме;
+StartupNotify=true
