@@ -1,0 +1,11 @@
+/* grid cells shown while a DeskWidgets widget is dragged */
+.deskwidgets-cell {
+  background-color: rgba(120, 120, 140, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+/* where the widget will land */
+.deskwidgets-target {
+  background-color: rgba(94, 92, 230, 0.32);
+  border: 2px solid rgba(94, 92, 230, 0.95);
+}
