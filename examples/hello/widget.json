@@ -1,0 +1,13 @@
+{
+  "id": "hello",
+  "version": "1.0",
+  "author": "DeskWidgets",
+  "category": "personal",
+  "name": {"uk": "Привіт", "en": "Hello"},
+  "description": {"uk": "Найпростіший віджет — приклад", "en": "The simplest widget — an example"},
+  "sizes": ["small", "medium"],
+  "interval": 60,
+  "options": [
+    {"key": "name", "type": "text", "default": {"uk": "світе", "en": "world"}, "label": {"uk": "Кого вітати", "en": "Who to greet"}}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "github_repo",
+  "version": "1.0",
+  "author": "DeskWidgets",
+  "category": "info",
+  "name": {"uk": "Репозиторій GitHub", "en": "GitHub repository"},
+  "description": {"uk": "Зірки, форки й задачі репозиторію — приклад завантаження даних",
+                  "en": "Stars, forks and issues of a repository — an example of fetching data"},
+  "sizes": ["small", "medium"],
+  "interval": 30,
+  "color_accent": "graphite",
+  "options": [
+    {"key": "repo", "type": "text", "default": "brndnmtthws/conky", "label": {"uk": "Репозиторій (власник/назва)", "en": "Repository (owner/name)"}}
+  ]
+}
