@@ -1,0 +1,23 @@
+Package: deskwidgets
+Version: @VERSION@
+Section: x11
+Priority: optional
+Architecture: all
+Installed-Size: @SIZE@
+Depends: conky-all, python3 (>= 3.10), python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), gir1.2-gdkpixbuf-2.0, fontconfig
+Recommends: fonts-ubuntu | fonts-inter, fonts-noto-cjk, gir1.2-ecal-2.0, gir1.2-edataserver-1.2, upower, libnotify-bin
+Suggests: nmap, docker.io, gnome-shell-extension-prefs
+Maintainer: DeskWidgets contributors <deskwidgets@users.noreply.github.com>
+Homepage: https://github.com/toksik/deskwidgets
+Description: macOS-style desktop widgets for Linux
+ DeskWidgets puts small, good-looking cards on your desktop — clocks, calendar,
+ weather, system monitors, now playing, events, notes, countdowns, exchange rates,
+ Docker and anime widgets (AniList schedule, manga clock, anime buddy).
+ .
+ Widgets snap to a grid (Super + drag), come in three sizes and nine styles
+ (glass, graphite, light, colour, sakura, manga, neon, borderless) with any
+ accent colour, and each one has its own settings. A widget is just a folder
+ with widget.json and widget.lua, so writing your own is easy.
+ .
+ Runs on X11 and Wayland (through Xwayland); a GNOME Shell helper shows the grid
+ while dragging.

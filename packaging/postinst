@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+    command -v update-desktop-database >/dev/null && update-desktop-database -q /usr/share/applications || true
+    command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q /usr/share/icons/hicolor || true
+    # mouse battery rule (data/udev/70-deskwidgets-hid.rules)
+    if command -v udevadm >/dev/null; then
+        udevadm control --reload || true
+        udevadm trigger --subsystem-match=hidraw --action=change || true
+    fi
+    echo "DeskWidgets installed. Each user: open \"DeskWidgets\" from the app menu (or run: deskwidgets setup && deskwidgets)."
+fi
+exit 0
