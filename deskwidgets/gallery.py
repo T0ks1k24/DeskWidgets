@@ -404,9 +404,9 @@ class GalleryWindow(Adw.ApplicationWindow):
     def build_mine(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_top=12, margin_bottom=18, margin_start=18, margin_end=18)
         hint = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER, label=tr(
-            'Затисніть Super і перетягніть віджет — він стане в найближчу клітинку сітки.\n'
+            'Затисніть Super (Win) і перетягніть віджет — він стане в найближчу клітинку сітки.\n'
             'Права кнопка миші на віджеті — його налаштування.',
-            'Hold Super and drag a widget — it snaps into the nearest grid cell.\n'
+            'Hold Super (Win) and drag a widget — it snaps into the nearest grid cell.\n'
             'Right-click a widget for its settings.'))
         hint.add_css_class('dim-label')
         hint.add_css_class('hint')

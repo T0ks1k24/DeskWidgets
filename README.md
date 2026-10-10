@@ -16,7 +16,7 @@ widget is a folder with two files.
   pause), system, processor, memory, disks, network (+ unknown-device watch), batteries (+ Bluetooth
   devices and Pulsar/Kysona-style 2.4 GHz gaming mice), Docker, note, countdown, picture, hryvnia exchange rates, and **anime**: next episodes from
   AniList, manga clock, anime buddy.
-* **Grid**: hold <kbd>Super</kbd> and drag a widget — it snaps into the nearest free cell. On GNOME a
+* **Grid**: hold <kbd>Super</kbd> (the <kbd>Win</kbd> key) and drag a widget — it snaps into the nearest free cell. On GNOME a
   small Shell helper shows the grid and the target cell while you drag.
 * **Three sizes** for every widget: small (1×1 cell), medium (2×1), large (2×2), plus a global
   widget size from 80 % to 150 %.
@@ -83,6 +83,8 @@ over a vendor protocol; DeskWidgets reads it itself. A from-source install needs
 | hold <kbd>Super</kbd> and drag | move a widget; it snaps to the grid |
 | right-click a widget | its settings (size, style, colour, options, remove) |
 | left-click | widget actions: pause music, open the show on AniList… |
+
+<kbd>Super</kbd> is the <kbd>Win</kbd> key (the one with the Windows logo).
 
 The command line does the same:
 

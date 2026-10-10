@@ -69,7 +69,7 @@ Accents: `auto`, `red`, `orange`, `yellow`, `green`, `mint`, `teal`, `blue`, `in
 ## Other desktops
 
 The widgets are X11 windows, so they work on any X11 desktop and on Wayland compositors with Xwayland
-(GNOME, KDE Plasma, …). Moving with <kbd>Super</kbd>+drag (KDE: <kbd>Alt</kbd>/<kbd>Meta</kbd>+drag) is
+(GNOME, KDE Plasma, …). Moving with <kbd>Super</kbd> (<kbd>Win</kbd>) + drag (KDE: <kbd>Alt</kbd>/<kbd>Meta</kbd>+drag) is
 the window manager's feature; the snapping is done by DeskWidgets everywhere. The hotkey and the grid
 helper are GNOME-only — elsewhere bind `deskwidgets gallery` to a shortcut yourself.
 
