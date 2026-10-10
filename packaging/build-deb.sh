@@ -18,6 +18,8 @@ sed -i '1s|.*|#!/usr/bin/python3|' "$PKG/usr/bin/deskwidgets"
 mkdir -p "$PKG/usr/share/doc/deskwidgets"
 cp "$ROOT/README.md" "$ROOT/CHANGELOG.md" "$PKG/usr/share/doc/deskwidgets/"
 cp "$ROOT/LICENSE" "$PKG/usr/share/doc/deskwidgets/copyright"
+printf '\nThe bundled icon font has its own license, see\n/usr/share/deskwidgets/fonts/LICENSE-MaterialDesignIcons.txt\n' \
+    >> "$PKG/usr/share/doc/deskwidgets/copyright"
 gzip -9n -c "$ROOT/CHANGELOG.md" > "$PKG/usr/share/doc/deskwidgets/changelog.gz"
 rm -f "$PKG/usr/share/doc/deskwidgets/CHANGELOG.md"
 
