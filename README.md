@@ -62,8 +62,8 @@ sudo dnf install conky python3-gobject gtk4 libadwaita evolution-data-server goo
 # Arch
 sudo pacman -S conky python-gobject gtk4 libadwaita evolution-data-server noto-fonts-cjk
 
-git clone https://github.com/toksik/deskwidgets
-cd deskwidgets
+git clone https://github.com/T0ks1k24/DeskWidgets
+cd DeskWidgets
 ./install.sh            # into ~/.local; or: sudo ./install.sh --system
 deskwidgets setup       # autostart, Super+Alt+W, GNOME grid helper
 deskwidgets             # start

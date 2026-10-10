@@ -756,7 +756,7 @@ class Gallery(Adw.Application):
     def about(self):
         about = Adw.AboutDialog(application_name=tr('Віджети', 'DeskWidgets'), application_icon='preferences-desktop-theme',
                                 version=VERSION, developer_name='DeskWidgets contributors', license_type=Gtk.License.MIT_X11,
-                                website='https://github.com/toksik/deskwidgets',
+                                website='https://github.com/T0ks1k24/DeskWidgets',
                                 comments=tr('Віджети робочого столу в стилі macOS для Linux. Легко додати свій віджет.',
                                             'macOS-style desktop widgets for Linux. Easy to add your own.'))
         about.present(self.win)

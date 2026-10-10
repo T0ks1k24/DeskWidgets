@@ -48,8 +48,8 @@ sudo apt install ./deskwidgets_*_all.deb
 ```sh
 sudo apt install conky-all python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-gdkpixbuf-2.0 \
                  gir1.2-ecal-2.0 gir1.2-edataserver-1.2 fonts-noto-cjk
-git clone https://github.com/toksik/deskwidgets
-cd deskwidgets
+git clone https://github.com/T0ks1k24/DeskWidgets
+cd DeskWidgets
 ./install.sh            # у ~/.local; або: sudo ./install.sh --system
 deskwidgets setup       # автозапуск, Super+Alt+W, підказка-сітка GNOME
 deskwidgets             # запуск

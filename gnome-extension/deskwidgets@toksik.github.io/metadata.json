@@ -3,6 +3,6 @@
   "name": "DeskWidgets grid",
   "description": "Shows the DeskWidgets grid while you drag a desktop widget and snaps it into the highlighted cell when you let go. Needs the DeskWidgets app.",
   "shell-version": ["45", "46", "47", "48", "49"],
-  "url": "https://github.com/toksik/deskwidgets",
+  "url": "https://github.com/T0ks1k24/DeskWidgets",
   "version": 1
 }
