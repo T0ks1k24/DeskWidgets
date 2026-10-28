@@ -489,8 +489,17 @@ class PresentTests(X11TestCase):
         with self.assertRaises(ValueError):
             self.present(window, cairo.ImageSurface(cairo.FORMAT_RGB24, 10, 10))
 
+    def test_no_below_state_when_it_would_hide_the_widgets_from_the_pointer(self):
+        with mock.patch.dict(os.environ, {'DESKWIDGETS_KEEP_BELOW': '0'}):
+            window = self.window(w=80, h=60, x=30, y=40)
+        c, atom = self.client, self.client.atom
+        self.assertEqual(c.property(window.id, '_NET_WM_STATE'),
+                         [atom(n) for n in ('_NET_WM_STATE_STICKY', '_NET_WM_STATE_SKIP_TASKBAR',
+                                            '_NET_WM_STATE_SKIP_PAGER')])
+
     def test_window_hints(self):
-        window = self.window(w=80, h=60, x=30, y=40)
+        with mock.patch.dict(os.environ, {'DESKWIDGETS_KEEP_BELOW': '1'}):
+            window = self.window(w=80, h=60, x=30, y=40)
         c, atom = self.client, self.client.atom
         self.assertEqual(c.property(window.id, '_NET_WM_STATE'),
                          [atom(n) for n in ('_NET_WM_STATE_BELOW', '_NET_WM_STATE_STICKY',
@@ -598,6 +607,21 @@ class FakeWMTests(X11TestCase):
         time.sleep(0.3)
         self.assertEqual(self.recorder.kinds('moved'), [(500, 400)])
         self.assertEqual(self.on_loop(window.position), (520, 410))
+
+
+@unittest.skipIf(x11 is None, 'pycairo is missing')
+class LayerTests(unittest.TestCase):
+    def test_widgets_are_not_forced_below_on_gnome_wayland(self):
+        patch = mock.patch
+        gnome_wayland = {'XDG_SESSION_TYPE': 'wayland', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME'}
+        with patch.dict(os.environ, gnome_wayland, clear=True):
+            self.assertFalse(x11.keep_below())
+        with patch.dict(os.environ, {**gnome_wayland, 'DESKWIDGETS_KEEP_BELOW': '1'}, clear=True):
+            self.assertTrue(x11.keep_below())
+        for env in ({'XDG_SESSION_TYPE': 'x11', 'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME'},
+                    {'XDG_SESSION_TYPE': 'wayland', 'XDG_CURRENT_DESKTOP': 'KDE'}, {}):
+            with patch.dict(os.environ, env, clear=True):
+                self.assertTrue(x11.keep_below(), env)
 
 
 class MouseTests(X11TestCase):

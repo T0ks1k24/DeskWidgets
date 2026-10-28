@@ -38,6 +38,20 @@ XA_WM_NAME = 39
 SELF_MOVE_GRACE = 0.3
 
 
+def keep_below():
+    """Whether widgets ask to stay below other windows (_NET_WM_STATE_BELOW).
+
+    Not on GNOME under Wayland: Ubuntu's desktop icons (DING) keep one transparent window over the whole screen
+    at the bottom of the *normal* layer, and a window marked "below" sits in a lower layer than that. The
+    widgets would still be visible (DING is transparent) but every click and drag would land on DING, so they
+    stay normal windows there, like the conky ones of DeskWidgets 1.x/2.x. DESKWIDGETS_KEEP_BELOW=1 or 0 overrides."""
+    override = os.environ.get('DESKWIDGETS_KEEP_BELOW')
+    if override in ('0', '1'):
+        return override == '1'
+    wayland = os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland' or bool(os.environ.get('WAYLAND_DISPLAY'))
+    return not (wayland and 'GNOME' in os.environ.get('XDG_CURRENT_DESKTOP', '').upper())
+
+
 def _on_x_error(display, event):
     """Errors arrive asynchronously. A widget window can vanish between two calls (BadWindow,
     BadDrawable): that must not end the process, which Xlib's default handler would."""
@@ -100,11 +114,13 @@ class X11Window(Window):
         protocols = (ctypes.c_ulong * 1)(a['WM_DELETE_WINDOW'])
         xlib.XSetWMProtocols(dpy, self.id, protocols, 1)
         self._property('_MOTIF_WM_HINTS', a['_MOTIF_WM_HINTS'], [xl.MWM_HINTS_DECORATIONS, 0, 0, 0, 0])
-        # NORMAL rather than UTILITY or DESKTOP: window managers keep moving such windows on Super+drag
-        # (the GNOME helper relies on that), and `skip_taskbar` already keeps them out of the alt-tab list
+        # NORMAL rather than UTILITY or DESKTOP: window managers keep moving such windows on Super+drag,
+        # and `skip_taskbar` already keeps them out of the alt-tab list
         self._property('_NET_WM_WINDOW_TYPE', xl.XA_ATOM, [a['_NET_WM_WINDOW_TYPE_NORMAL']])
-        self._property('_NET_WM_STATE', xl.XA_ATOM, [a[n] for n in (
-            '_NET_WM_STATE_BELOW', '_NET_WM_STATE_STICKY', '_NET_WM_STATE_SKIP_TASKBAR', '_NET_WM_STATE_SKIP_PAGER')])
+        states = ['_NET_WM_STATE_STICKY', '_NET_WM_STATE_SKIP_TASKBAR', '_NET_WM_STATE_SKIP_PAGER']
+        if keep_below():
+            states.insert(0, '_NET_WM_STATE_BELOW')
+        self._property('_NET_WM_STATE', xl.XA_ATOM, [a[n] for n in states])
         self._property('_NET_WM_DESKTOP', xl.XA_CARDINAL, [ALL_DESKTOPS])
         self._property('_NET_WM_USER_TIME', xl.XA_CARDINAL, [0])   # "not user-initiated": do not focus on map
         self._property('_NET_WM_PID', xl.XA_CARDINAL, [os.getpid()])
@@ -338,7 +354,10 @@ class X11Backend(Backend):
                 self._run_timers()
                 if self._quit.is_set():
                     break
-                self._x.XFlush(self.dpy)
+                # callbacks talk to the server (position(), ...) and Xlib files the events that arrive meanwhile
+                # in its own queue, not on the socket: sleeping now would leave them unhandled until the next wake-up
+                if self._x.XPending(self.dpy):
+                    continue
                 timeout = self._timers.next_timeout()
                 for fd, _ in poller.poll(None if timeout is None else math.ceil(timeout * 1000)):
                     if fd == self._wake_r:
