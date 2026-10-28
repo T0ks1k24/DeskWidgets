@@ -48,6 +48,9 @@ python3 -m venv --system-site-packages "$VENV" || { echo "python3-venv is missin
 "$VENV/bin/python" -m pip install --quiet --upgrade pip
 "$VENV/bin/python" -m pip install --quiet "$SRC"
 
+# replace, never write through: an older install left a symlink here that points into /usr/bin
+rm -f "$DEST/bin/deskwidgets" "$DEST/share/applications/$APP_ID.Gallery.desktop" \
+    "$DEST/share/icons/hicolor/scalable/apps/$APP_ID.svg"
 cat > "$DEST/bin/deskwidgets" <<LAUNCHER
 #!/bin/sh
 exec "$PREFIX/share/deskwidgets/venv/bin/python" -m deskwidgets "\$@"
