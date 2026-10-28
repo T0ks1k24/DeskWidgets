@@ -4,10 +4,12 @@ import cairo
 from ..core.catalog import SIZES
 from ..core.grid import BASE_RADIUS
 
-CELL_FILL = (1, 1, 1, 0.06)
-CELL_LINE = (1, 1, 1, 0.22)
-TARGET_FILL = (0.04, 0.52, 1.0, 0.30)
-TARGET_LINE = (0.04, 0.52, 1.0, 0.90)
+# Readable on any wallpaper: a translucent dark fill shows on light pictures, the light outline on dark ones,
+# and the thin dark rim around it keeps the outline visible on mid-tones.
+CELL_FILL = (0, 0, 0, 0.18)
+CELL_STROKES = [((0, 0, 0, 0.30), 3.5), ((1, 1, 1, 0.70), 1.5)]
+TARGET_FILL = (0.04, 0.52, 1.0, 0.38)
+TARGET_STROKES = [((1, 1, 1, 0.85), 4.5), ((0.04, 0.52, 1.0, 1.0), 2.5)]
 
 
 class GridOverlay:
@@ -59,11 +61,11 @@ class GridOverlay:
                 if (col, row) in taken and (col, row) not in self._target_cells(size, spot):
                     continue
                 self._cell(cr, 1 + col * grid.pitch, 1 + row * grid.pitch, grid.cell, grid.cell, radius,
-                           CELL_FILL, CELL_LINE)
+                           CELL_FILL, CELL_STROKES)
         if spot is not None:
             cw, ch = SIZES[size]
             self._cell(cr, 1 + spot[0] * grid.pitch, 1 + spot[1] * grid.pitch, *grid.card_px(size), radius,
-                       TARGET_FILL, TARGET_LINE)
+                       TARGET_FILL, TARGET_STROKES)
         surface.flush()
         return surface
 
@@ -75,7 +77,7 @@ class GridOverlay:
         return {(spot[0] + c, spot[1] + r) for c in range(cw) for r in range(ch)}
 
     @staticmethod
-    def _cell(cr, x, y, w, h, r, fill, line):
+    def _cell(cr, x, y, w, h, r, fill, strokes):
         cr.new_sub_path()
         cr.arc(x + w - r, y + r, r, -1.5708, 0)
         cr.arc(x + w - r, y + h - r, r, 0, 1.5708)
@@ -84,6 +86,8 @@ class GridOverlay:
         cr.close_path()
         cr.set_source_rgba(*fill)
         cr.fill_preserve()
-        cr.set_source_rgba(*line)
-        cr.set_line_width(1.5)
-        cr.stroke()
+        for color, width in strokes:
+            cr.set_source_rgba(*color)
+            cr.set_line_width(width)
+            cr.stroke_preserve()
+        cr.new_path()
