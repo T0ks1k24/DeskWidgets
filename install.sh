@@ -3,10 +3,13 @@
 #
 #   ./install.sh                 install for the current user into ~/.local (no root needed)
 #   sudo ./install.sh --system   install for everyone into /usr/local
-#   ./install.sh --prefix DIR    install into DIR (DESTDIR is honoured for packaging)
+#   ./install.sh --prefix DIR    install into DIR
 #   ./install.sh --uninstall     remove a user install (add --system for /usr/local)
 #
-# Then run `deskwidgets setup` (autostart, Super+Alt+W, GNOME grid helper) and `deskwidgets`.
+# DeskWidgets lives in its own virtual environment that can also see the system's Python packages
+# (so PyGObject, GTK and pycairo from your distribution are used when present). Needs python3 with
+# the venv module; see the README for the packages to install first.
+# Then run `deskwidgets setup` (autostart, hotkey, menu entry) and `deskwidgets`.
 set -eu
 
 SRC=$(cd "$(dirname "$0")" && pwd)
@@ -23,56 +26,42 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
-DEST="${DESTDIR:-}$PREFIX"
-SHARE="$DEST/share/deskwidgets"
-UUID=deskwidgets@toksik.github.io
+DEST="$PREFIX"
+HOME_DIR="$DEST/share/deskwidgets"
+VENV="$HOME_DIR/venv"
+APP_ID=io.github.toksik.DeskWidgets
 
 if [ "$UNINSTALL" = 1 ]; then
     [ "$SYSTEM" = 1 ] && rm -f /etc/udev/rules.d/70-deskwidgets-hid.rules
-    rm -rf "$SHARE" "$DEST/bin/deskwidgets" \
-        "$DEST/share/applications/io.github.toksik.DeskWidgets.Gallery.desktop" \
-        "$DEST/share/icons/hicolor/scalable/apps/io.github.toksik.DeskWidgets.svg"
-    [ "$SYSTEM" = 1 ] && rm -rf "$DEST/share/gnome-shell/extensions/$UUID" || rm -rf "$HOME/.local/share/gnome-shell/extensions/$UUID"
+    rm -rf "$HOME_DIR" "$DEST/bin/deskwidgets" \
+        "$DEST/share/applications/$APP_ID.Gallery.desktop" \
+        "$DEST/share/icons/hicolor/scalable/apps/$APP_ID.svg"
     echo "DeskWidgets removed from $PREFIX (your widgets and settings in ~/.config/deskwidgets are kept)"
     exit 0
 fi
 
-command -v conky >/dev/null || echo "warning: conky is not installed (Debian/Ubuntu: sudo apt install conky-all)" >&2
+command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || { echo "Python 3.9 or newer is required" >&2; exit 1; }
 
-mkdir -p "$SHARE" "$DEST/bin" "$DEST/share/applications" "$DEST/share/icons/hicolor/scalable/apps"
-rm -rf "$SHARE/deskwidgets" "$SHARE/engine" "$SHARE/widgets" "$SHARE/fonts" "$SHARE/gnome-extension" "$SHARE/data" "$SHARE/docs" "$SHARE/examples"
-for d in deskwidgets engine widgets fonts gnome-extension data docs examples; do
-    cp -r "$SRC/$d" "$SHARE/"
-done
-find "$SHARE" -name '__pycache__' -type d -prune -exec rm -rf {} +
-rm -rf "$SHARE/docs/screenshots"   # README pictures, not needed at runtime
-cp "$SRC/bin/deskwidgets" "$DEST/bin/deskwidgets"
+mkdir -p "$HOME_DIR" "$DEST/bin" "$DEST/share/applications" "$DEST/share/icons/hicolor/scalable/apps"
+python3 -m venv --system-site-packages "$VENV" || { echo "python3-venv is missing (Debian/Ubuntu: sudo apt install python3-venv)" >&2; exit 1; }
+"$VENV/bin/python" -m pip install --quiet --upgrade pip
+"$VENV/bin/python" -m pip install --quiet "$SRC"
+
+cat > "$DEST/bin/deskwidgets" <<LAUNCHER
+#!/bin/sh
+exec "$PREFIX/share/deskwidgets/venv/bin/python" -m deskwidgets "\$@"
+LAUNCHER
 chmod 755 "$DEST/bin/deskwidgets"
-sed "s|^Exec=deskwidgets|Exec=$PREFIX/bin/deskwidgets|" "$SRC/data/io.github.toksik.DeskWidgets.Gallery.desktop" \
-    > "$DEST/share/applications/io.github.toksik.DeskWidgets.Gallery.desktop"
-cp "$SRC/data/icons/io.github.toksik.DeskWidgets.svg" "$DEST/share/icons/hicolor/scalable/apps/"
-# udev rule: read the battery of wireless gaming mice without root (see data/udev/)
-RULES=data/udev/70-deskwidgets-hid.rules
-if [ -n "${DESTDIR:-}" ] && [ "$PREFIX" = /usr ]; then
-    install -D -m 644 "$SRC/$RULES" "$DESTDIR/usr/lib/udev/rules.d/70-deskwidgets-hid.rules"
-elif [ "$SYSTEM" = 1 ]; then
-    install -D -m 644 "$SRC/$RULES" /etc/udev/rules.d/70-deskwidgets-hid.rules
-    udevadm control --reload 2>/dev/null && udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
-fi
-if [ "$SYSTEM" = 1 ] || [ -n "${DESTDIR:-}" ]; then
-    mkdir -p "$DEST/share/gnome-shell/extensions"
-    rm -rf "$DEST/share/gnome-shell/extensions/$UUID"
-    cp -r "$SRC/gnome-extension/$UUID" "$DEST/share/gnome-shell/extensions/"
-fi
-if [ -z "${DESTDIR:-}" ] && command -v update-desktop-database >/dev/null; then
-    update-desktop-database "$DEST/share/applications" 2>/dev/null || true
+
+cp "$SRC/deskwidgets/assets/icons/$APP_ID.svg" "$DEST/share/icons/hicolor/scalable/apps/"
+sed "s|^Exec=.*|Exec=$PREFIX/bin/deskwidgets gallery|" "$SRC/packaging/linux/$APP_ID.Gallery.desktop" \
+    > "$DEST/share/applications/$APP_ID.Gallery.desktop"
+
+if [ "$SYSTEM" = 1 ] && [ -d /etc/udev/rules.d ]; then
+    install -m 644 "$SRC/deskwidgets/assets/udev/70-deskwidgets-hid.rules" /etc/udev/rules.d/
+    command -v udevadm >/dev/null && { udevadm control --reload; udevadm trigger --subsystem-match=hidraw; } || true
 fi
 
-echo "DeskWidgets installed into $PREFIX"
+echo "DeskWidgets installed in $PREFIX. Next: deskwidgets setup && deskwidgets   (deskwidgets doctor checks the dependencies)"
 case ":$PATH:" in *":$PREFIX/bin:"*) ;; *) echo "note: add $PREFIX/bin to your PATH" ;; esac
-if [ "$SYSTEM" = 0 ] && [ -z "${DESTDIR:-}" ] && [ ! -e /etc/udev/rules.d/70-deskwidgets-hid.rules ] && [ ! -e /usr/lib/udev/rules.d/70-deskwidgets-hid.rules ]; then
-    echo "optional, for the battery of Pulsar/Kysona-style wireless mice (needs root once):"
-    echo "  sudo install -m 644 $SHARE/$RULES /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw"
-fi
-echo "next: deskwidgets setup   # autostart, Super+Alt+W, GNOME grid helper"
-echo "      deskwidgets         # start the widgets (or open \"DeskWidgets\" from the app menu)"
