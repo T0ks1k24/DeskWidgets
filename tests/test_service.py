@@ -345,6 +345,18 @@ class ControlTests(IsolatedTestCase):
             loop.join(5)
 
 
+class AddressTests(unittest.TestCase):
+    def test_a_long_runtime_dir_still_gives_a_usable_socket_path(self):
+        from pathlib import Path
+        with patch.object(paths, 'SOCKET', Path('/tmp/' + 'x' * 150 + '/control')), patch.object(ipc, 'WINDOWS', False):
+            family, address = ipc._family_and_address()
+            self.assertEqual(family, 'AF_UNIX')
+            self.assertLessEqual(len(address.encode()), ipc.UNIX_PATH_MAX)
+            self.assertEqual(ipc._family_and_address()[1], address, 'the path must be stable between calls')
+        with patch.object(paths, 'SOCKET', Path('/run/user/1000/deskwidgets/control')), patch.object(ipc, 'WINDOWS', False):
+            self.assertEqual(ipc._family_and_address()[1], '/run/user/1000/deskwidgets/control')
+
+
 class LegacyTests(unittest.TestCase):
     def test_recognises_old_conky_widgets_and_services(self):
         from deskwidgets.service import legacy

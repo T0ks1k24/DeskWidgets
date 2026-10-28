@@ -5,6 +5,7 @@ protected by a random key that only the user can read, so other accounts on the 
 drive your desktop. Messages are JSON, never pickles.
 """
 import getpass
+import hashlib
 import json
 import os
 import secrets
@@ -30,10 +31,17 @@ class AlreadyRunning(Exception):
     pass
 
 
+UNIX_PATH_MAX = 100   # sun_path is 108 bytes on Linux (104 on BSD), including the terminating NUL
+
+
 def _family_and_address():
     if WINDOWS:
         return 'AF_PIPE', r'\\.\pipe\deskwidgets-' + getpass.getuser().replace('\\', '_')
-    return 'AF_UNIX', str(paths.SOCKET)
+    address = str(paths.SOCKET)
+    if len(os.fsencode(address)) > UNIX_PATH_MAX:   # a very long $XDG_RUNTIME_DIR: use a short, stable path
+        digest = hashlib.sha1(address.encode()).hexdigest()[:10]
+        address = f'/tmp/deskwidgets-{os.getuid()}-{digest}.sock'
+    return 'AF_UNIX', address
 
 
 def _key(create=False):
