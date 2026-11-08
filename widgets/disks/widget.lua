@@ -4,24 +4,14 @@ local C, F, PAD, ICON, RING = L.C, L.F, L.PAD, L.ICON, L.RING
 
 local W = {}
 local disks = {}
-local REAL = { ext4 = true, ext3 = true, btrfs = true, xfs = true, f2fs = true, ntfs = true, ntfs3 = true,
-               fuseblk = true, exfat = true, zfs = true, vfat = false }
 
-local function name_of(target)
-    if target == '/' then return L.tr('Система', 'System') end
-    if target == L.HOME then return L.tr('Домашня тека', 'Home') end
-    return target:match('([^/]+)$') or target
-end
+-- the engine names the system disk 'system' and the home partition 'home'
+local NAMES = { system = L.tr('Система', 'System'), home = L.tr('Домашня тека', 'Home') }
 
 local function read_disks()
     disks = {}
-    local seen = {}
-    for line in L.popen('df -B1 --output=source,target,fstype,size,used'):gmatch('[^\n]+') do
-        local src, target, fstype, size, used = line:match('^(%S+)%s+(%S+)%s+(%S+)%s+(%d+)%s+(%d+)$')
-        if src and REAL[fstype] and not seen[src] and not target:match('^/snap') and not target:match('^/boot') then
-            seen[src] = true
-            disks[#disks + 1] = { name = name_of(target), size = L.num(size), used = L.num(used) }
-        end
+    for _, d in ipairs(L.sys.disks()) do
+        disks[#disks + 1] = { name = NAMES[d.name] or d.name, size = d.total, used = d.used }
     end
 end
 

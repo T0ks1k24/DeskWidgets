@@ -5,17 +5,14 @@ local C, F, PAD, ICON, RING = L.C, L.F, L.PAD, L.ICON, L.RING
 local W = { scale = { large = 'small' } }
 local GB = L.tr(' ГБ', ' GB')
 
-local function gib(kib)
-    local g = kib / 2 ^ 20
+local function gib(bytes)
+    local g = bytes / 2 ^ 30
     return g >= 100 and string.format('%.0f', g) or string.format('%.1f', g)
 end
 
 local function info()
-    local s = L.read_file('/proc/meminfo') or ''
-    local function kv(key) return L.num(s:match(key .. ':%s+(%d+)')) end
-    local total, avail = math.max(kv('MemTotal'), 1), kv('MemAvailable')
-    return { total = total, used = total - avail, cached = kv('Cached') + kv('Buffers'),
-             stotal = kv('SwapTotal'), sused = kv('SwapTotal') - kv('SwapFree') }
+    local m = L.sys.memory()
+    return { total = m.total, used = m.used, cached = m.cached, stotal = m.swap_total, sused = m.swap_used }
 end
 
 function W.draw(cr, x, y, w, h)

@@ -5,7 +5,6 @@ local F, PAD, ICON = L.F, L.PAD, L.ICON
 local W = {}
 local LOC = L.opt('city', 'Kyiv')
 local TITLE = L.opt('title', LOC)
-local CACHE = L.RUN .. '/weather-' .. L.key(LOC .. '-' .. L.LANG)
 local weather
 
 -- the sky gradient replaces the card in glass/graphite/light unless the user picked an accent
@@ -14,24 +13,78 @@ local SKY_MODE = L.T.card and L.opt_bool('sky', true) and not L.ACCENT and not L
     and (L.STYLE == 'glass' or L.STYLE == 'graphite' or L.STYLE == 'light')
 local C = SKY_MODE and L.ON_DARK or L.C
 
-local function load_weather()
-    local s = L.read_file(CACHE)
-    if not s then return end
-    local w = { hourly = {}, daily = {} }
-    for k, v in s:gmatch('([%w_]+)=([^\n]*)') do
-        local slot = k:match('^h(%d+)$')
-        local dslot = k:match('^d(%d+)$')
-        if slot then
-            local f = L.fields(v)
-            w.hourly[L.num(slot)] = { time = f[1], code = L.num(f[2]), temp = f[3], day = f[4] == '1' }
-        elseif dslot then
-            local f = L.fields(v)
-            w.daily[L.num(dslot)] = { date = f[1], code = L.num(f[2]), hi = L.num(f[3]), lo = L.num(f[4]), rain = L.num(f[5]) }
-        else
-            w[k] = v
+local HOURLY_SLOTS = 5   -- forecast columns after "Now"
+local DAYS = 3
+
+-- "2026-10-12" + "06:42 AM" -> time stamp, nil for "No sunrise" and the like
+local function clock_time(day, text)
+    local y, mo, d = day:match('^(%d+)-(%d+)-(%d+)$')
+    local h, mi, ap = (text or ''):match('^(%d+):(%d+)%s*(%a+)$')
+    if not (y and h) then return nil end
+    h = tonumber(h) % 12
+    if ap:upper() == 'PM' then h = h + 12 end
+    return os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d), hour = h, min = tonumber(mi), sec = 0 })
+end
+
+local function is_day(data, when)
+    local day = os.date('%Y-%m-%d', when)
+    for _, entry in ipairs(data.weather) do
+        if entry.date == day then
+            local astro = entry.astronomy and entry.astronomy[1] or {}
+            local rise, set = clock_time(day, astro.sunrise), clock_time(day, astro.sunset)
+            if not (rise and set) then break end
+            return rise <= when and when < set
         end
     end
-    weather = w
+    local hour = tonumber(os.date('%H', when))
+    return hour >= 7 and hour < 19
+end
+
+-- wttr.in's JSON -> what the widget draws
+local function parse(data)
+    local now = os.time()
+    local cur, today = data.current_condition[1], data.weather[1]
+    local w = { hourly = {}, daily = {} }
+    local desc = cur['lang_' .. L.LANG]
+    w.desc = (desc and desc[1] and desc[1].value) or cur.weatherDesc[1].value
+    w.city, w.temp, w.feels, w.code = TITLE, cur.temp_C, cur.FeelsLikeC, cur.weatherCode
+    w.hum, w.wind, w.hi, w.lo = cur.humidity, cur.windspeedKmph, today.maxtempC, today.mintempC
+    w.day = is_day(data, now) and '1' or '0'
+    w.updated = os.date('%H:%M')
+    for _, entry in ipairs(data.weather) do
+        local y, mo, d = entry.date:match('^(%d+)-(%d+)-(%d+)$')
+        for _, h in ipairs(entry.hourly) do
+            local when = os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d),
+                                   hour = (tonumber(h.time) or 0) // 100, min = 0, sec = 0 })
+            if when > now and #w.hourly < HOURLY_SLOTS then
+                w.hourly[#w.hourly + 1] = { time = os.date('%H:00', when), code = L.num(h.weatherCode), temp = h.tempC,
+                                            day = is_day(data, when) }
+            end
+        end
+    end
+    for i = 1, math.min(DAYS, #data.weather) do
+        local entry = data.weather[i]
+        local hours = entry.hourly
+        local noon = hours[#hours // 2 + 1]
+        local rain = 0
+        for _, h in ipairs(hours) do rain = math.max(rain, L.num(h.chanceofrain)) end
+        w.daily[i] = { date = entry.date, code = L.num(noon.weatherCode), hi = L.num(entry.maxtempC),
+                       lo = L.num(entry.mintempC), rain = rain }
+    end
+    return w
+end
+
+local stamp = -1
+local function load_weather()
+    local url = 'https://wttr.in/' .. L.urlencode(LOC) .. '?format=j1&lang=' .. L.LANG
+    local body, _, _, st = L.http(url, { every = 900, headers = { ['User-Agent'] = 'curl/8' } })
+    if not body or st == stamp then return end
+    stamp = st
+    local data = L.json(body)
+    if data and data.current_condition and data.weather and data.weather[1] then
+        local ok, parsed = pcall(parse, data)
+        if ok then weather = parsed else host.log('weather: ' .. tostring(parsed)) end
+    end
 end
 
 local function demo()
@@ -51,8 +104,7 @@ function W.tick()
         if not weather then demo() end
         return
     end
-    if L.due('weather_fetch', 900) then L.python('fetch.py', LOC, TITLE, CACHE, L.LANG) end
-    if L.due('weather_read', 20) then load_weather() end
+    load_weather()
 end
 
 -- weather mapping

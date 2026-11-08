@@ -35,7 +35,7 @@ local local_offset = 0
 local function refresh_offsets()
     local_offset = parse_offset(os.date('%z'))
     for _, z in ipairs(zones) do
-        z.offset = parse_offset(L.popen('TZ=' .. L.quote(z.tz) .. ' date +%z'))
+        z.offset = L.tz_offset(z.tz)
     end
 end
 

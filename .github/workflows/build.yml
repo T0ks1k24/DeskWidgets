@@ -9,17 +9,47 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  deb:
-    runs-on: ubuntu-24.04
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: System packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb fonts-dejavu-core fonts-noto-core \
+            libxkbcommon-dev libwayland-dev libx11-dev
+      - name: Tests (Linux, with a virtual X display for the X11 backend)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a cargo test --locked
+      - name: Tests (Windows)
+        if: runner.os == 'Windows'
+        run: cargo test --locked
+      - name: Shell scripts
+        if: runner.os == 'Linux'
+        run: for f in install.sh packaging/*.sh packaging/postinst packaging/postrm; do sh -n $f; done
+
+  deb:
+    needs: test
+    runs-on: ubuntu-22.04   # the oldest glibc we support
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
       - name: Tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lua5.4 nodejs fakeroot
-
-      - name: Check
-        run: make check
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fakeroot libxkbcommon-dev libwayland-dev
 
       - name: Build .deb
         run: make deb
@@ -35,3 +65,31 @@ jobs:
         with:
           files: dist/*.deb
           generate_release_notes: true
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path target/release/deskwidgets.exe, LICENSE, README.md -DestinationPath dist/deskwidgets-windows-x86_64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deskwidgets-windows
+          path: dist/*.zip
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip

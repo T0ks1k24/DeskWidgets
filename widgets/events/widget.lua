@@ -1,5 +1,5 @@
--- Up next: events from the GNOME calendars. The service keeps RUN/events current, so new
--- events show up within seconds. small: the next 2. medium: 3. large: up to 8.
+-- Up next: events from the GNOME calendars (Evolution Data Server). The host keeps
+-- L.service('events') current, so new events show up within seconds. small: the next 2. medium: 3. large: up to 8.
 local L = require 'lib'
 local C, F, PAD, ICON = L.C, L.F, L.PAD, L.ICON
 
@@ -8,18 +8,13 @@ local events = {}
 
 local function load_events()
     events = {}
-    local kv = L.read_kv(L.RUN .. '/events')
-    if not kv then return end
-    for i = 1, L.num(kv.count) do
-        local v = kv['e' .. i]
-        if v then
-            local f = L.fields(v)
-            events[#events + 1] = {
-                s = L.num(f[1]), e = L.num(f[2]), allday = f[3] == '1',
-                color = (f[4] or ''):match('^#(%x%x%x%x%x%x)$'),
-                title = table.concat(f, '|', 6),
-            }
-        end
+    local data = L.service('events')
+    if not data then return end
+    for _, ev in ipairs(data.events or {}) do
+        events[#events + 1] = {
+            s = ev.start, e = ev['end'], allday = ev.allday,
+            color = (ev.color or ''):match('^#(%x%x%x%x%x%x)$'), title = ev.title,
+        }
     end
 end
 

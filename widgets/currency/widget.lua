@@ -5,8 +5,9 @@ local C, F, PAD, ICON = L.C, L.F, L.PAD, L.ICON
 
 local W = {}
 local CODES = L.opt_list('codes', 'USD,EUR,PLN')
-local CACHE = L.RUN .. '/currency'
+local API = 'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json'
 local rates = {}
+local fetched
 
 function W.tick()
     if L.DEMO then
@@ -14,8 +15,26 @@ function W.tick()
                   PLN = '11.3813|11.3550|Злотий', GBP = '55.2|55.1|Фунт стерлінгів' }
         return
     end
-    if L.due('fetch', 3600) then L.python('fetch.py', CACHE) end
-    if L.due('read', 60) then rates = L.read_kv(CACHE) or {} end
+    local body, _, _, st = L.http(API, { every = 3600 })
+    if not body then return end
+    local today = L.json(body)
+    if type(today) ~= 'table' or not today[1] then return end
+    -- the day before, for the change arrows
+    local d, m, y = today[1].exchangedate:match('^(%d+)%.(%d+)%.(%d+)$')
+    local prev_day = os.date('%Y%m%d', os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d) - 1, hour = 12 }))
+    local before = L.http(API .. '&date=' .. prev_day, { every = 43200 })
+    if not before then return end
+    local key = tostring(st) .. before:len()
+    if key == fetched then return end
+    fetched = key
+    local prev = {}
+    for _, r in ipairs(L.json(before) or {}) do prev[r.cc] = r.rate end
+    local list = { date = today[1].exchangedate }
+    for _, r in ipairs(today) do
+        local name = tostring(r.txt):gsub('%s+', ' '):gsub('|', '/')
+        list[r.cc] = string.format('%s|%s|%s', r.rate, prev[r.cc] or r.rate, name)
+    end
+    rates = list
 end
 
 function W.draw(cr, x, y, w, h)

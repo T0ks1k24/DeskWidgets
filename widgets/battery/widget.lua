@@ -13,62 +13,25 @@ local KIND_ICON = {
     phone = ICON.phone, tablet = ICON.tablet, ['gaming-input'] = ICON.gamepad,
 }
 
-local function sys(dir, name) return L.trim(L.read_file(dir .. '/' .. name) or '') end
-
-local BAT_DIR
-for _, name in ipairs({ 'BAT0', 'BAT1', 'BAT2', 'BATT', 'CMB0' }) do
-    local dir = '/sys/class/power_supply/' .. name
-    if L.read_file(dir .. '/capacity') then BAT_DIR = dir break end
-end
-
 local function read_laptop()
-    local dir = BAT_DIR
-    if not dir then laptop = nil return end
-    local status = sys(dir, 'status')
-    local now = L.num(sys(dir, 'energy_now')); local full = L.num(sys(dir, 'energy_full'))
-    local rate = L.num(sys(dir, 'power_now'))
-    if now == 0 then  -- some batteries report charge (µAh) and current (µA) instead
-        now, full, rate = L.num(sys(dir, 'charge_now')), L.num(sys(dir, 'charge_full')), L.num(sys(dir, 'current_now'))
-    end
-    local hours
-    if rate > 0 then
-        if status == 'Discharging' then hours = now / rate
-        elseif status == 'Charging' then hours = (full - now) / rate end
-    end
-    laptop = { pct = L.num(sys(dir, 'capacity')), status = status, hours = hours }
+    local b = L.sys.battery()
+    if not b then laptop = nil return end
+    local status = b.full and 'Full' or b.charging and 'Charging' or b.plugged and 'Not charging' or 'Discharging'
+    laptop = { pct = b.percent, status = status, hours = b.secs_left and b.secs_left / 3600 or nil }
 end
 
--- UPower peripherals (anything with a charge that is not a power supply: Bluetooth mice,
--- headphones, Logitech receivers, etc.)
-local upower_devices, hid_devices, hid_denied = {}, {}, ''
+-- peripherals the host reports (Bluetooth mice and headphones, wireless gaming mice): see providers/batteries.py
+local hid_denied = ''
 
-local function read_upower()
-    upower_devices = {}
-    local out = L.popen('upower -d')
-    for block in (out .. '\nDevice:'):gmatch('Device:(.-)\n%f[%w]') do
-        local path = block:match('^%s*(%S+)') or ''
-        local supply = block:match('power supply:%s*(%a+)')
-        local pct = block:match('percentage:%s*([%d%.]+)%%')
-        local kind = block:match('\n  (%a[%w%-]*)\n')
-        if supply == 'no' and pct and not path:match('DisplayDevice') then
-            upower_devices[#upower_devices + 1] = {
-                pct = L.num(pct), icon = KIND_ICON[kind] or ICON.bluetooth, online = true,
-                name = L.trim(block:match('model:%s*([^\n]*)') or kind or ''),
-            }
-        end
-    end
-end
-
--- wireless gaming mice read by the service over their vendor HID protocol (RUN/hid-batteries)
-local function read_hid()
-    hid_devices = {}
-    local kv = L.read_kv(L.RUN .. '/hid-batteries') or {}
-    hid_denied = kv.denied or ''
-    for i = 1, L.num(kv.count) do
-        local f = L.fields(kv['d' .. i] or '')
-        hid_devices[#hid_devices + 1] = {
-            name = f[1], pct = tonumber(f[2]), charging = f[3] == '1', online = f[4] == '1',
-            icon = KIND_ICON[f[5]] or ICON.mouse,
+local function read_peripherals()
+    devices = {}
+    local data = L.service('batteries')
+    if not data then return end
+    hid_denied = data.denied or ''
+    for _, d in ipairs(data.devices or {}) do
+        devices[#devices + 1] = {
+            name = d.name, pct = d.percent, charging = d.charging, online = d.online,
+            icon = KIND_ICON[d.kind] or ICON.bluetooth,
         }
     end
 end
@@ -81,11 +44,7 @@ function W.tick()
         return
     end
     if L.due('laptop', 10) then read_laptop() end
-    if L.due('upower', 60) then read_upower() end
-    if L.due('hid', 20) then read_hid() end
-    devices = {}
-    for _, d in ipairs(hid_devices) do devices[#devices + 1] = d end
-    for _, d in ipairs(upower_devices) do devices[#devices + 1] = d end
+    read_peripherals()
 end
 
 local function duration(hrs)
@@ -121,7 +80,7 @@ function W.draw(cr, x, y, w, h)
     end
     local status, plugged = status_text(laptop)
     -- a mouse that needs the udev rule is named instead of being silently missing
-    if hid_denied ~= '' and #hid_devices == 0 then
+    if hid_denied ~= '' and #devices == 0 then
         status = L.tr('Миша: потрібен доступ — deskwidgets doctor', 'Mouse: needs access — deskwidgets doctor')
     end
     local ring_c = colours(laptop.pct, plugged)

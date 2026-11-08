@@ -1,5 +1,5 @@
 -- Calendar. small: today and the week. medium: today and the month. large: the month, big.
--- Days with events get a dot (from the events cache the service keeps).
+-- Days with events get a dot (from L.service('events'), the host keeps it current).
 local L = require 'lib'
 local C, F, PAD = L.C, L.F, L.PAD
 
@@ -9,20 +9,17 @@ local busy = {}  -- 'YYYY-MM-DD' -> true
 
 local function load_busy()
     busy = {}
-    local kv = L.read_kv(L.RUN .. '/events')
-    if not kv then return end
-    for k, v in pairs(kv) do
-        if k:match('^e%d+$') then
-            local f = L.fields(v)
-            local s, e, allday = L.num(f[1]), L.num(f[2]), f[3] == '1'
-            local last = allday and e - 1 or math.max(s, e - 1)
-            local d = s
-            while d <= last do
-                busy[os.date('%Y-%m-%d', d)] = true
-                d = d + 86400
-            end
-            busy[os.date('%Y-%m-%d', last)] = true
+    local data = L.service('events')
+    if not data then return end
+    for _, ev in ipairs(data.events or {}) do
+        local s, e = ev.start, ev['end']
+        local last = ev.allday and e - 1 or math.max(s, e - 1)
+        local d = s
+        while d <= last do
+            busy[os.date('%Y-%m-%d', d)] = true
+            d = d + 86400
         end
+        busy[os.date('%Y-%m-%d', last)] = true
     end
 end
 

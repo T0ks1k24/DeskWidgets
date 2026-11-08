@@ -1,4 +1,4 @@
--- Network: link speeds, traffic graph and (option `lan`) the LAN device watch (netwatch.sh, nmap).
+-- Network: link speeds, traffic graph and (option `lan`) the LAN device watch (`deskwidgets netwatch`, nmap).
 -- small: speeds + mini graph. medium: adds the LAN line. large: bigger graph + totals.
 local L = require 'lib'
 local C, F, PAD, ICON = L.C, L.F, L.PAD, L.ICON
@@ -8,18 +8,13 @@ local LAN = L.opt_bool('lan', false)
 local NET_CACHE = L.RUN .. '/netwatch'
 
 local W = {}
-local lan, iface
+local lan, net
 local down_hist, up_hist = {}, {}
 
-local function default_iface()
-    local best, metric
-    for line in (L.read_file('/proc/net/route') or ''):gmatch('[^\n]+') do
-        local ifc, dest, met = line:match('^(%S+)%s+(%x+)%s+%x+%s+%x+%s+%d+%s+%d+%s+(%d+)')
-        if dest == '00000000' and (not metric or L.num(met) < metric) then
-            best, metric = ifc, L.num(met)
-        end
-    end
-    return best
+local function size_text(bytes)
+    local mb = bytes / 2 ^ 20
+    if mb >= 1024 then return string.format('%.1f %s', mb / 1024, L.tr('ГБ', 'GB')) end
+    return string.format('%.1f %s', mb, L.tr('МБ', 'MB'))
 end
 
 local function speed(kib)
@@ -45,22 +40,21 @@ end
 function W.tick()
     if LAN and not L.DEMO then
         if L.due('netwatch', 60) then
-            L.spawn('/usr/bin/env bash ' .. L.quote(L.WIDGET_DIR .. '/netwatch.sh') .. ' ' .. L.quote(NET_CACHE) .. ' '
-                    .. L.quote(L.CONFIG .. '/network_known.txt') .. ' ' .. L.quote(L.CONFIG .. '/network_seen.txt') .. ' '
-                    .. L.quote(L.CONFIG .. '/network_log.txt') .. ' ' .. L.LANG)
+            L.run({ L.EXE, 'netwatch', NET_CACHE, L.CONFIG .. L.SEP .. 'network_known.txt',
+                    L.CONFIG .. L.SEP .. 'network_seen.txt', L.CONFIG .. L.SEP .. 'network_log.txt', L.LANG })
         end
         if L.due('lan_read', 10) then load_lan() end
     end
-    if L.due('iface', 10) then iface = default_iface() end
+    net = L.sys.net()
     if L.DEMO and #down_hist == 0 then
         for i = 1, HIST do
             push(down_hist, 40 + 30 * math.sin(i / 6) + (i % 7) * 9)
             push(up_hist, 10 + 8 * math.cos(i / 5))
         end
     end
-    if iface and not L.DEMO then
-        push(down_hist, L.num(L.cp('${downspeedf ' .. iface .. '}')))
-        push(up_hist, L.num(L.cp('${upspeedf ' .. iface .. '}')))
+    if net.iface ~= '' and not L.DEMO then
+        push(down_hist, net.down)
+        push(up_hist, net.up)
     end
 end
 
@@ -116,6 +110,9 @@ local function lan_line(cr, x, by, w)
     if not lan then
         L.font(cr, F.regular, 11.5); L.set(cr, C.text3)
         L.text(cr, L.tr('Сканування локальної мережі…', 'Scanning the local network…'), x + PAD, by)
+    elseif lan.state == 'OFFLINE' then
+        L.font(cr, F.regular, 11.5); L.set(cr, C.text3)
+        L.text(cr, L.tr('Немає мережі', 'No network'), x + PAD, by)
     elseif lan.state == 'NONMAP' then
         L.font(cr, F.regular, 11.5); L.set(cr, C.text3)
         L.text(cr, L.tr('Для перевірки мережі встановіть nmap', 'Install nmap to watch the network'), x + PAD, by)
@@ -137,12 +134,10 @@ end
 
 function W.draw(cr, x, y, w, h)
     L.card(cr, x, y, w, h)
-    local wifi = iface and iface:match('^wl')
+    local wifi = net and net.kind == 'wifi'
+    local online = net and net.iface ~= ''
     local where = L.tr('немає з’єднання', 'offline')
-    if iface then
-        local name = wifi and L.trim(L.cp('${wireless_essid ' .. iface .. '}')) or 'Ethernet'
-        where = name .. ' · ' .. L.cp('${addr ' .. iface .. '}')
-    end
+    if online then where = (net.name ~= '' and net.name or 'Wi-Fi') .. ' · ' .. net.ip end
     if L.DEMO then where = 'Wi-Fi · 192.168.1.26' end
     local small = L.SIZE == 'small'
     L.header(cr, x + PAD, y + 30, w - 2 * PAD, wifi and ICON.wifi or ICON.ethernet, L.acc(L.SYS.cyan),
@@ -163,10 +158,10 @@ function W.draw(cr, x, y, w, h)
         local gh = h - 84 - (LAN and 90 or 60)
         graph(cr, x + PAD, y + 92, w - 2 * PAD, gh)
         local ty = y + 92 + gh + 30
-        if iface and not L.DEMO then
+        if online and not L.DEMO then
             L.font(cr, F.regular, 11.5); L.set(cr, C.text2)
-            L.text(cr, L.tr('Отримано: ', 'Received: ') .. L.cp('${totaldown ' .. iface .. '}'), x + PAD, ty)
-            L.text(cr, L.tr('Надіслано: ', 'Sent: ') .. L.cp('${totalup ' .. iface .. '}'), x + w - PAD, ty, 'r')
+            L.text(cr, L.tr('Отримано: ', 'Received: ') .. size_text(net.total_down), x + PAD, ty)
+            L.text(cr, L.tr('Надіслано: ', 'Sent: ') .. size_text(net.total_up), x + w - PAD, ty, 'r')
         end
         if LAN then lan_line(cr, x, y + h - 22, w) end
         return

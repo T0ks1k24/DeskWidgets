@@ -32,7 +32,7 @@ end
 if #phrases == 0 then for _, p in ipairs(BUILTIN) do phrases[#phrases + 1] = L.tr(p[1], p[2]) end end
 
 -- is a Japanese font installed? (otherwise the greeting is shown in the UI language only)
-local HAS_CJK = L.popen('fc-list :lang=ja family'):match('%S') ~= nil
+local HAS_CJK = L.HAS_CJK
 
 local function greeting()
     local hr = os.date('*t').hour

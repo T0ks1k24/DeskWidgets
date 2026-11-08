@@ -6,7 +6,8 @@
   "name": {"uk": "Docker", "en": "Docker"},
   "description": {"uk": "Контейнери і їхній стан", "en": "Containers and their state"},
   "sizes": ["medium", "small", "large"],
-  "interval": 10,
+  "interval": 1,
+  "uses": ["docker"],
   "color_accent": "blue",
   "options": [
     {"key": "all", "type": "bool", "default": true, "label": {"uk": "Показувати й зупинені", "en": "Show stopped containers too"}}

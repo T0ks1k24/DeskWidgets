@@ -7,18 +7,63 @@ local W = {}
 local MODE = L.opt('mode', 'airing')
 local USER = L.opt('username', '')
 local LANG = L.opt('title_lang', 'romaji')
-local CACHE = L.RUN .. '/anime-' .. L.key(MODE .. USER .. LANG)
-local COVERS = L.RUN .. '/anime-covers'
+local API = 'https://graphql.anilist.co'
+local MEDIA = 'id siteUrl episodes title { romaji english native } coverImage { medium } nextAiringEpisode { airingAt episode }'
+local QUERIES = {
+    airing = 'query { Page(page: 1, perPage: 16) { media(status: RELEASING, type: ANIME, sort: POPULARITY_DESC, isAdult: false) { '
+        .. MEDIA .. ' } } }',
+    trending = 'query { Page(page: 1, perPage: 12) { media(type: ANIME, sort: TRENDING_DESC, isAdult: false) { ' .. MEDIA .. ' } } }',
+    list = 'query ($user: String) { MediaListCollection(userName: $user, type: ANIME, status_in: [CURRENT, REPEATING]) '
+        .. '{ lists { entries { progress media { ' .. MEDIA .. ' } } } } }',
+}
+if MODE == 'list' and USER == '' then MODE = 'airing' end
 local shows = {}
 local rows_drawn = {}   -- y ranges of the rows on screen, for clicks
+local stamp = -1
+
+-- AniList's answer -> up to 10 shows, the soonest episode first
+local function parse(data)
+    local items = {}
+    if MODE == 'list' then
+        for _, lst in ipairs(data.data.MediaListCollection.lists or {}) do
+            for _, entry in ipairs(lst.entries or {}) do items[#items + 1] = { media = entry.media, progress = entry.progress or 0 } end
+        end
+    else
+        for _, media in ipairs(data.data.Page.media or {}) do items[#items + 1] = { media = media, progress = 0 } end
+    end
+    local out = {}
+    for _, item in ipairs(items) do
+        local media = item.media
+        local nxt = media.nextAiringEpisode or {}
+        local title = media.title[LANG] or media.title.romaji or ''
+        out[#out + 1] = { at = nxt.airingAt or 0, ep = nxt.episode or 0, total = media.episodes or 0,
+                          title = title:gsub('[|\n]', ' '), cover_url = media.coverImage and media.coverImage.medium,
+                          url = media.siteUrl or '', progress = item.progress }
+    end
+    if MODE ~= 'trending' then   -- soonest episode first, finished/unknown at the end
+        table.sort(out, function(a, b)
+            if (a.at == 0) ~= (b.at == 0) then return b.at == 0 end
+            return a.at < b.at
+        end)
+    end
+    while #out > 10 do out[#out] = nil end
+    return out
+end
 
 local function load()
-    shows = {}
-    local kv = L.read_kv(CACHE) or {}
-    for i = 1, L.num(kv.count) do
-        local f = L.fields(kv['a' .. i] or '')
-        shows[#shows + 1] = { at = L.num(f[1]), ep = L.num(f[2]), total = L.num(f[3]), title = f[4] or '',
-                              cover = f[5], url = f[6], progress = L.num(f[7]) }
+    local request = L.json_encode({ query = QUERIES[MODE], variables = MODE == 'list' and { user = USER } or {} })
+    local body, _, _, st = L.http(API, { method = 'POST', body = request, every = 1800,
+                                         headers = { ['Content-Type'] = 'application/json', Accept = 'application/json' } })
+    if body and st ~= stamp then
+        stamp = st
+        local data = L.json(body)
+        if data and data.data then
+            local ok, parsed = pcall(parse, data)
+            if ok then shows = parsed else host.log('anime: ' .. tostring(parsed)) end
+        end
+    end
+    for _, sh in ipairs(shows) do   -- covers arrive one by one
+        if not sh.cover and sh.cover_url then sh.cover = L.download(sh.cover_url) end
     end
 end
 
@@ -31,14 +76,13 @@ function W.tick()
                   { at = now + 4 * 86400, ep = 7, total = 13, title = 'Chainsaw Man' } }
         return
     end
-    if L.due('fetch', 1800) then L.python('fetch.py', CACHE, COVERS, MODE, USER, LANG) end
-    if L.due('read', 30) then load() end
+    load()
 end
 
 function W.click(x, y)
     for _, r in ipairs(rows_drawn) do
         if y >= r[1] and y <= r[2] and r[3] and r[3] ~= '' then
-            L.spawn('xdg-open ' .. L.quote(r[3]))
+            L.open_url(r[3])
             return true
         end
     end

@@ -6,7 +6,7 @@ local C, F, PAD = L.C, L.F, L.PAD
 local W = { scale = { large = 'small' } }
 local SECONDS = L.opt_bool('seconds', false)
 local SFX = L.opt('sfx', 'チクタク')
-local HAS_CJK = L.popen('fc-list :lang=ja family'):match('%S') ~= nil
+local HAS_CJK = L.HAS_CJK
 local KANJI = { '日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日' }
 
 -- text with a thick ink outline (comic lettering)

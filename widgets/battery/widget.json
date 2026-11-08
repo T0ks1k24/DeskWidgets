@@ -8,6 +8,6 @@
   "sizes": ["small", "medium", "large"],
   "interval": 10,
   "color_accent": "green",
-  "uses": ["hid-batteries"],
+  "uses": ["batteries"],
   "options": []
 }

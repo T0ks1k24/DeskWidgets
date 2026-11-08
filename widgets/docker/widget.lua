@@ -1,4 +1,4 @@
--- Docker: containers and their state (docker ps every 20 s).
+-- Docker: the host asks `docker ps` in the background every 3 s (L.service('docker')).
 -- small: running count and the first names. medium: 3 rows. large: up to 8 rows.
 local L = require 'lib'
 local C, F, PAD, ICON = L.C, L.F, L.PAD, L.ICON
@@ -26,12 +26,13 @@ local function uptime(status)
 end
 
 local function read()
-    local out = L.popen("docker ps " .. (ALL and '-a ' or '') .. "--format '{{.Names}}|{{.Image}}|{{.State}}|{{.Status}}'")
+    local data = L.service('docker') or {}
     containers = {}
-    available = out ~= ''
-    for line in out:gmatch('[^\n]+') do
-        local f = L.fields(line)
-        containers[#containers + 1] = { name = f[1], image = f[2], state = f[3], status = f[4] or '' }
+    available = data.available == true
+    for _, c in ipairs(data.containers or {}) do
+        if ALL or c.state == 'running' or c.state == 'paused' or c.state == 'restarting' then
+            containers[#containers + 1] = { name = c.name, image = c.image, state = c.state, status = c.status }
+        end
     end
     table.sort(containers, function(a, b)
         if (a.state == 'running') ~= (b.state == 'running') then return a.state == 'running' end
@@ -46,7 +47,7 @@ function W.tick()
                        { name = 'nginx-dev', image = 'nginx:latest', state = 'exited', status = 'Exited (0) 2 days ago' } }
         return
     end
-    if L.due('docker', 20) then read() end
+    read()
 end
 
 local STATE = {

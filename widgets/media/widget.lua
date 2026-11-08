@@ -1,6 +1,6 @@
--- Now playing: the active MPRIS player (Firefox, Spotify, Telegram...). The service follows the
--- players over D-Bus and writes RUN/media + cover art. small, medium, large (small scaled up).
--- Left click toggles play/pause.
+-- Now playing: the active media player (Firefox, Spotify, Telegram...; MPRIS on Linux, the system
+-- media controls on Windows). The host follows the players and keeps `L.service('media')` current.
+-- small, medium, large (small scaled up). Left click toggles play/pause.
 local L = require 'lib'
 local C, F, PAD, ICON = L.C, L.F, L.PAD, L.ICON
 
@@ -13,16 +13,11 @@ function W.tick()
               artist = L.tr('Океан Ельзи', 'M83'), length = '241', pos = '83', ts = tostring(os.time()), rate = '1' }
         return
     end
-    m = L.read_kv(L.RUN .. '/media') or {}
+    m = L.service('media') or {}
 end
 
 function W.click()
-    if m.bus and m.bus ~= '' then
-        L.spawn('gdbus call --session --dest ' .. L.quote(m.bus) .. ' --object-path /org/mpris/MediaPlayer2'
-                .. ' --method org.mpris.MediaPlayer2.Player.PlayPause')
-        return true
-    end
-    return false
+    return m.status ~= nil and m.status ~= 'none' and L.media_control('PlayPause')
 end
 
 local function clock(sec)

@@ -1,0 +1,80 @@
+[package]
+name = "deskwidgets"
+version = "3.0.0"
+edition = "2021"
+description = "macOS-style desktop widgets for Linux and Windows, drawn from Lua"
+license = "MIT"
+repository = "https://github.com/T0ks1k24/DeskWidgets"
+readme = "README.md"
+rust-version = "1.86"
+
+[[bin]]
+name = "deskwidgets"
+path = "src/main.rs"
+
+[features]
+default = ["gallery"]
+# the egui gallery window; without it `deskwidgets gallery` just says so
+gallery = ["dep:eframe", "dep:rfd"]
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono-tz = "0.10"
+clap = { version = "4", default-features = false, features = ["std", "help", "usage", "error-context", "suggestions"] }
+ctrlc = { version = "3", features = ["termination"] }
+fontdb = "0.23"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "ico"] }
+include_dir = "0.7"
+mlua = { version = "0.10", features = ["lua54", "vendored", "serialize"] }
+regex = { version = "1", default-features = false, features = ["std", "unicode-perl", "perf"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sysinfo = { version = "0.33", default-features = false, features = ["system", "disk", "network"] }
+tiny-skia = "0.11"
+ttf-parser = { version = "0.25", features = ["variable-fonts"] }
+getrandom = "0.3"
+ureq = "2"
+
+eframe = { version = "0.31", optional = true, default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+rfd = { version = "0.15", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+x11rb = { version = "0.13", features = ["randr", "shape", "xtest"] }
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+percent-encoding = "2"
+rrule = "0.13"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows = { version = "0.61", features = [
+    "Foundation",
+    "Media_Control",
+    "Storage_Streams",
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Console",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Power",
+    "Win32_System_Threading",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Globalization",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+# debug info made target/ several GB; line tables are enough for backtraces
+debug = "line-tables-only"
