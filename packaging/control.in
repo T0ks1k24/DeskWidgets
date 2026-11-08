@@ -2,11 +2,11 @@ Package: deskwidgets
 Version: @VERSION@
 Section: x11
 Priority: optional
-Architecture: all
+Architecture: @ARCH@
 Installed-Size: @SIZE@
-Depends: python3 (>= 3.9), python3-cairo, python3-lupa, python3-psutil, python3-pil, tzdata, fontconfig, libx11-6
-Recommends: python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), fonts-ubuntu | fonts-inter, fonts-noto-cjk, gir1.2-ecal-2.0, gir1.2-edataserver-1.2, upower, libnotify-bin, libxext6
-Suggests: python3-tk, nmap, docker.io
+Depends: libc6 (>= 2.35), libgcc-s1, libx11-6, tzdata
+Recommends: libgl1 | libegl1, libxkbcommon0, libxkbcommon-x11-0, libxcursor1, libxi6, libxrandr2, fonts-ubuntu | fonts-inter | fonts-noto-core, fonts-noto-cjk, evolution-data-server, upower, libnotify-bin, xdg-utils
+Suggests: nmap, docker.io, python3
 Maintainer: DeskWidgets contributors <deskwidgets@users.noreply.github.com>
 Homepage: https://github.com/T0ks1k24/DeskWidgets
 Description: macOS-style desktop widgets for Linux and Windows
@@ -20,4 +20,5 @@ Description: macOS-style desktop widgets for Linux and Windows
  with widget.json and widget.lua, so writing your own is easy.
  .
  Runs on X11 and Wayland (through Xwayland); widgets are drawn by DeskWidgets
- itself with Cairo, no other desktop-widget program is needed.
+ itself (one program written in Rust, Lua for the widgets), no other
+ desktop-widget program is needed.

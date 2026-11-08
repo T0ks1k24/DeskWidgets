@@ -10,7 +10,7 @@ The files are plain JSON if you prefer an editor or want to keep them in your do
 | `~/.config/deskwidgets/widgets/` | `%APPDATA%\DeskWidgets\widgets\` | your own widgets (one folder each) |
 | `~/.config/deskwidgets/network_known.txt` | the same folder | known LAN devices for the Network widget: `mac\|name` per line |
 | `~/.cache/deskwidgets/` | `%LOCALAPPDATA%\DeskWidgets\cache\` | gallery thumbnails, converted pictures, `service.log` |
-| `$XDG_RUNTIME_DIR/deskwidgets/` | `%LOCALAPPDATA%\DeskWidgets\run\` | widget caches, the control socket, the generated font config |
+| `$XDG_RUNTIME_DIR/deskwidgets/` | `%LOCALAPPDATA%\DeskWidgets\run\` | widget caches, the control socket and its key |
 
 ## settings.json
 
@@ -38,7 +38,7 @@ The files are plain JSON if you prefer an editor or want to keep them in your do
 | `scale` | widget size, 0.6 – 2.0 (a small card is 170 px at 1.0) |
 | `gap` | pixels between widgets |
 | `margin_top`, `margin_bottom`, `margin_side` | free space around the grid (top bar, dock) |
-| `font` | text font family; `auto` = Ubuntu Sans if installed, else the system's sans-serif (Linux), Segoe UI (Windows). Applies after the service restarts (done for you when you change it in the gallery). Icons are bundled |
+| `font` | text font family; `auto` = Ubuntu Sans if installed, else the system's sans-serif (Linux), Segoe UI (Windows). Applies right away when you change it in the gallery (or after `deskwidgets quit` and a new start if you edit the file by hand). Icons are bundled |
 | `default_style`, `default_accent` | style and colour for newly added widgets (`auto` = the widget's own) |
 | `autostart` | start with the session (`~/.config/autostart/io.github.toksik.DeskWidgets.desktop`; the `Run` registry key on Windows) |
 | `hotkey` | <kbd>Super</kbd>+<kbd>Alt</kbd>+<kbd>W</kbd> (GNOME custom shortcut) or <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>W</kbd> (Windows) opens the gallery |
@@ -82,7 +82,7 @@ On Windows the widgets are layered windows kept below your other windows; <kbd>W
 
 Gaming mice on Compx/CX receivers (Pulsar, Kysona, ATK, VXE …) don't expose their battery to the kernel
 yet; DeskWidgets asks the mouse through `/dev/hidraw*` with the same read-only commands the Linux
-`hid-pulsar` driver uses. `deskwidgets/assets/udev/70-deskwidgets-hid.rules` gives the logged-in user access to the
+`hid-pulsar` driver uses. `assets/udev/70-deskwidgets-hid.rules` gives the logged-in user access to the
 vendor interface of the listed **mouse** receivers only (never keyboards — their interfaces carry
 typing). `deskwidgets mice` shows what is found and readable. To add your mouse, copy a line of the
 rule with your `idVendor`/`idProduct` from `lsusb` and open an issue so it can be added for everyone.
@@ -92,7 +92,7 @@ rule with your `idVendor`/`idProduct` from `lsusb` and open an issue so it can b
 * `deskwidgets doctor` lists missing pieces.
 * Logs: `~/.cache/deskwidgets/service.log` (`%LOCALAPPDATA%\DeskWidgets\cache\service.log`), or run `deskwidgets run` in a terminal.
 * `deskwidgets status` shows whether the service runs.
-* A widget makes everything stutter: the log says "a frame took …s" — slow work belongs in a helper script (see the widget guide).
+* A widget makes everything stutter: the log says "a frame took …s" — slow work belongs in a background download or a helper program (see the widget guide).
 * A widget shows an error on its card: the message comes from its `widget.lua`.
 * "Now playing" is empty with snap Firefox when DeskWidgets was started from an app that has its own
   AppArmor profile (e.g. a VS Code terminal): start it from the session (autostart, app menu) instead.

@@ -35,28 +35,27 @@ widget is a folder with two files.
 
 ## Install
 
-DeskWidgets needs Python 3.9+, [pycairo](https://pycairo.readthedocs.io), [lupa](https://github.com/scoder/lupa),
-[psutil](https://github.com/giampaolo/psutil) and [Pillow](https://python-pillow.org); no other widget program.
+DeskWidgets is **one program** written in Rust: the widgets, fonts and icons are inside it, drawing needs no
+Cairo and no Python. No other widget program is needed.
 
 ### Windows 10 / 11
 
-Install [Python](https://www.python.org/downloads/windows/) (tick "Add python.exe to PATH"), then in a terminal:
+Download `deskwidgets-windows-x86_64.zip` from [Releases](../../releases), unpack it anywhere and in a terminal there:
 
 ```bat
-pip install deskwidgets        :: or, from a clone of this repository: pip install .
 deskwidgets setup       :: autostart and a Start-menu entry
 deskwidgets             :: start; the tray icon opens the gallery
 ```
 
-Optional: `pip install winsdk` adds the "Now playing" widget (any player that shows in the volume flyout).
 Widgets that need Linux services (Up next, mouse battery) say so in the gallery and are not offered.
+*"Now playing"* works with any player that shows in the volume flyout.
 
 ### Debian, Ubuntu, Mint, Pop!_OS
 
-Download `deskwidgets_<version>_all.deb` from [Releases](../../releases) and:
+Download `deskwidgets_<version>_amd64.deb` from [Releases](../../releases) and:
 
 ```sh
-sudo apt install ./deskwidgets_*_all.deb
+sudo apt install ./deskwidgets_*_amd64.deb
 ```
 
 Then open **DeskWidgets** from the app menu (the first start sets up autostart and
@@ -64,28 +63,23 @@ Then open **DeskWidgets** from the app menu (the first start sets up autostart a
 
 ### Any Linux distribution, from source
 
-Needs an X11 session or Xwayland (GNOME, KDE Plasma, … have it), `python3` with `venv`, and — from your distribution —
-the Python bindings below. PyGObject + GTK 4 + libadwaita ≥ 1.5 give the native gallery and the media/calendar services;
-without them DeskWidgets uses the Tk gallery (`python3-tk`) and just skips those two widgets.
+Needs an X11 session or Xwayland (GNOME, KDE Plasma, … have it) and the [Rust toolchain](https://rustup.rs).
+The gallery window needs OpenGL (Mesa) and `libxkbcommon`, which every desktop already has; for Japanese text in the
+anime widgets install a CJK font; "Up next" needs Evolution Data Server (it comes with GNOME).
 
 ```sh
-# Debian/Ubuntu
-sudo apt install python3-venv python3-cairo python3-psutil python3-pil python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 \
-                 gir1.2-ecal-2.0 gir1.2-edataserver-1.2 fonts-noto-cjk
-# Fedora
-sudo dnf install python3-cairo python3-psutil python3-pillow python3-gobject gtk4 libadwaita \
-                 evolution-data-server google-noto-sans-cjk-fonts
-# Arch
-sudo pacman -S python-cairo python-psutil python-pillow python-gobject gtk4 libadwaita evolution-data-server noto-fonts-cjk
+# Debian/Ubuntu                                    # Fedora                                  # Arch
+sudo apt install build-essential fonts-noto-cjk    # sudo dnf install gcc google-noto-sans-cjk-fonts   # sudo pacman -S base-devel noto-fonts-cjk
 
 git clone https://github.com/T0ks1k24/DeskWidgets
 cd DeskWidgets
-./install.sh            # into ~/.local; or: sudo ./install.sh --system
+./install.sh            # builds and installs into ~/.local; or: sudo ./install.sh --system
 deskwidgets setup       # autostart, Super+Alt+W (GNOME), menu entry
 deskwidgets             # start
 ```
 
-Try it without installing: `python3 -m deskwidgets` from the checkout. Check what is missing: `deskwidgets doctor`.
+Try it without installing: `make run` from the checkout (the widgets are read from the folder, so edits show up
+after `deskwidgets reload`). Check what is missing: `deskwidgets doctor`.
 
 **Wireless gaming mice** (Pulsar, Kysona, ATK, VXE … on Compx/CX receivers) report their battery only
 over a vendor protocol; DeskWidgets reads it itself. A from-source install needs a udev rule once
@@ -127,36 +121,38 @@ deskwidgets reload && deskwidgets add pomodoro
 
 A widget is `widget.json` (name, sizes, options → the settings window is generated from it) and
 `widget.lua` (drawing). Read [docs/creating-widgets.md](docs/creating-widgets.md) and look at
-[examples/](examples) and the built-in [widgets](deskwidgets/widgets). Pull requests with new widgets are welcome —
+[examples/](examples) and the built-in [widgets](widgets). Pull requests with new widgets are welcome —
 see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How it works
 
-One Python service (`deskwidgets run`) owns every widget window. Each widget runs `widget.lua` in its own embedded
-Lua ([lupa](https://github.com/scoder/lupa)) and draws with Cairo ([pycairo](https://pycairo.readthedocs.io)) into
-a transparent window; Windows and Linux differ only in the small window layer (Win32 layered windows, or X11/Xwayland).
-The service keeps widgets on the grid, feeds them live data (media player, calendars, Docker, batteries) and is
-controlled by the CLI and the gallery over a local socket.
+One service (`deskwidgets run`) owns every widget window. Each widget runs `widget.lua` in its own embedded
+Lua 5.4 ([mlua](https://github.com/mlua-rs/mlua)) and draws with a Cairo-style API on a pure-Rust rasteriser
+([tiny-skia](https://github.com/linebender/tiny-skia), fonts through ttf-parser) into a transparent window; Windows
+and Linux differ only in the small window layer (Win32 layered windows, or X11/Xwayland over a plain socket, no libX11).
+The service keeps widgets on the grid, feeds them live data (media player over D-Bus, calendars, Docker, batteries)
+and is controlled by the CLI and the gallery (egui) over a local socket. Downloads for widgets run in the background
+(`L.http`), so a slow network never stops a frame.
 
 ```
-deskwidgets/
+src/
   core/         settings, widget catalog, grid, layout: plain logic, no windows
-  engine/       the widget runtime: Lua + Cairo, fonts, images, system info; renders headless too
-    lua/        lib.lua (the widget API) and main.lua
-  platform/     one file per OS behind base.py: x11.py, win32.py; autostart and hotkeys (integration.py)
+  engine/       the widget runtime: Lua + canvas, fonts, images, system info, downloads; renders headless too
+  platform/     one file per OS behind mod.rs: x11.rs, win32.rs; autostart and hotkeys (integration.rs)
   providers/    background data: media player, calendars, Docker, batteries
   service/      the daemon: widget windows, dragging, the control socket
-  gallery/      the gallery window: GTK 4 (Linux) or Tk (Windows)
-  widgets/      the built-in widgets: widget.json + widget.lua (+ helper scripts)
-  assets/       icon font, icons, udev rule
-tests/          pytest: engine, service, providers, backends
-examples/       widgets to copy from
-packaging/      .deb build, screenshots
+  gallery/      the gallery window (egui)
+lua/            lib.lua (the widget API) and main.lua
+widgets/        the built-in widgets: widget.json + widget.lua
+assets/         icon font, icons, udev rule
+tests/          integration tests: engine (every widget renders), service, X11 backend (Xvfb), core
+examples/       widgets to copy from, the screenshot generator
+packaging/      .deb build
 ```
 
 ## Credits
 
-* [Cairo](https://www.cairographics.org) draws everything, [Lua](https://www.lua.org) (through [lupa](https://github.com/scoder/lupa)) runs the widgets.
+* [tiny-skia](https://github.com/linebender/tiny-skia) draws everything, [Lua](https://www.lua.org) (through [mlua](https://github.com/mlua-rs/mlua)) runs the widgets, [egui](https://www.egui.rs) is the gallery.
 * Icons: [Material Design Icons](https://pictogrammers.com/library/mdi/) (Pictogrammers Free License / Apache 2.0, bundled in `fonts/`).
 * Data: [wttr.in](https://wttr.in), [AniList](https://anilist.co), [National Bank of Ukraine](https://bank.gov.ua/en/open-data/api-dev).
 

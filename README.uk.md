@@ -31,28 +31,27 @@
 
 ## Встановлення
 
-Потрібні Python 3.9+, [pycairo](https://pycairo.readthedocs.io), [lupa](https://github.com/scoder/lupa),
-[psutil](https://github.com/giampaolo/psutil) і [Pillow](https://python-pillow.org); жодної іншої програми для віджетів.
+DeskWidgets — **одна програма** на Rust: віджети, шрифти й іконки всередині неї; для малювання не потрібні ні Cairo,
+ні Python. Жодної іншої програми для віджетів не треба.
 
 ### Windows 10 / 11
 
-Встановіть [Python](https://www.python.org/downloads/windows/) (з пунктом «Add python.exe to PATH»), далі в терміналі:
+Завантажте `deskwidgets-windows-x86_64.zip` з [Releases](../../releases), розпакуйте будь-куди й у терміналі там:
 
 ```bat
-pip install deskwidgets        :: або з клону репозиторію: pip install .
 deskwidgets setup       :: автозапуск і пункт у меню «Пуск»
 deskwidgets             :: запуск; галерею відкриває значок у треї
 ```
 
-За бажанням: `pip install winsdk` додає віджет «Зараз грає» (будь-який плеєр, що видно в панелі гучності).
 Віджети, яким потрібні служби Linux («Події», заряд миші), у галереї не пропонуються.
+«Зараз грає» працює з будь-яким плеєром, що видно в панелі гучності.
 
 ### Debian, Ubuntu, Mint, Pop!_OS
 
-Завантажте `deskwidgets_<версія>_all.deb` з [Releases](../../releases):
+Завантажте `deskwidgets_<версія>_amd64.deb` з [Releases](../../releases):
 
 ```sh
-sudo apt install ./deskwidgets_*_all.deb
+sudo apt install ./deskwidgets_*_amd64.deb
 ```
 
 Відкрийте **Віджети** в меню програм — перший запуск увімкне автозапуск і
@@ -60,22 +59,21 @@ sudo apt install ./deskwidgets_*_all.deb
 
 ### Будь-який дистрибутив Linux, з вихідних кодів
 
-Потрібні сеанс X11 або Xwayland (є в GNOME, KDE Plasma…), `python3` з `venv` і — з вашого дистрибутива — прив’язки
-Python. PyGObject + GTK 4 + libadwaita ≥ 1.5 дають рідну галерею та служби «Зараз грає» й «Події»; без них
-DeskWidgets використає галерею на Tk (`python3-tk`) і просто пропустить ці два віджети.
+Потрібні сеанс X11 або Xwayland (є в GNOME, KDE Plasma…) і [Rust](https://rustup.rs). Вікну галереї потрібні OpenGL
+(Mesa) і `libxkbcommon` — вони є на кожному робочому столі; для японського тексту в аніме-віджетах поставте CJK-шрифт;
+для «Подій» потрібен Evolution Data Server (він іде з GNOME).
 
 ```sh
-sudo apt install python3-venv python3-cairo python3-psutil python3-pil python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 \
-                 gir1.2-ecal-2.0 gir1.2-edataserver-1.2 fonts-noto-cjk
+sudo apt install build-essential fonts-noto-cjk
 git clone https://github.com/T0ks1k24/DeskWidgets
 cd DeskWidgets
-./install.sh            # у ~/.local; або: sudo ./install.sh --system
+./install.sh            # збирає й ставить у ~/.local; або: sudo ./install.sh --system
 deskwidgets setup       # автозапуск, Super+Alt+W (GNOME), пункт меню
 deskwidgets             # запуск
 ```
 
-Без встановлення: `python3 -m deskwidgets` у теці проєкту. Чого бракує — покаже `deskwidgets doctor`.
-Для Fedora й Arch — див. [README.md](README.md#any-linux-distribution-from-source).
+Без встановлення: `make run` у теці проєкту (віджети читаються з теки, зміни видно після `deskwidgets reload`).
+Чого бракує — покаже `deskwidgets doctor`. Для Fedora й Arch — див. [README.md](README.md#any-linux-distribution-from-source).
 
 **Бездротові ігрові миші** (Pulsar, Kysona, ATK, VXE … з приймачами Compx/CX) повідомляють заряд лише
 власним протоколом — DeskWidgets читає його сам. При встановленні з вихідних кодів один раз потрібне
@@ -107,7 +105,7 @@ deskwidgets reload && deskwidgets add pomodoro
 ```
 
 Віджет — це `widget.json` (назва, розміри, параметри — з них будується вікно налаштувань) і
-`widget.lua` (малювання). Приклади — у [examples/](examples) і [deskwidgets/widgets](deskwidgets/widgets). Пул-реквести з
+`widget.lua` (малювання). Приклади — у [examples/](examples) і [widgets](widgets). Пул-реквести з
 новими віджетами вітаються — див. [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Ліцензія

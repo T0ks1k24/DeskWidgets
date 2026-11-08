@@ -1,12 +1,12 @@
 -- GitHub repository: stars, forks and open issues. Shows the usual pattern for online data:
--- a helper script downloads in the background (L.python + L.due), the widget reads its cache.
+-- L.http downloads in the background (it never blocks a frame), the widget parses the answer once per download.
 local L = require 'lib'
 local C, F, PAD, ICON = L.C, L.F, L.PAD, L.ICON
 
 local W = {}
 local REPO = L.opt('repo', 'brndnmtthws/conky')
-local CACHE = L.RUN .. '/github-' .. L.key(REPO)
 local data = {}
+local stamp = -1
 
 function W.tick()
     if L.DEMO then
@@ -14,8 +14,17 @@ function W.tick()
                  description = 'Light-weight system monitor for X, Wayland and other things, too' }
         return
     end
-    if L.due('fetch', 1800) then L.python('fetch.py', CACHE, REPO) end   -- every 30 minutes
-    if L.due('read', 30) then data = L.read_kv(CACHE) or {} end
+    local body, _, _, st = L.http('https://api.github.com/repos/' .. REPO,
+                                  { every = 1800, headers = { Accept = 'application/vnd.github+json' } })   -- every 30 minutes
+    if body and st ~= stamp then
+        stamp = st
+        local r = L.json(body)
+        if r and r.full_name then
+            data = { name = r.full_name, stars = tostring(r.stargazers_count), forks = tostring(r.forks_count),
+                     issues = tostring(r.open_issues_count), language = r.language or '',
+                     description = (r.description or ''):gsub('%s+', ' ') }
+        end
+    end
 end
 
 local function stat(cr, x, y, icon, value, label)

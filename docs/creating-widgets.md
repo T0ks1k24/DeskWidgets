@@ -8,11 +8,11 @@ my_widget/
 └── widget.lua    # draws the card with Cairo (via the helper library `lib`)
 ```
 
-Optional extras: helper scripts (e.g. `fetch.py` that downloads data), images, a README.
+Optional extras: images, extra Lua modules (`require 'mymodule'` finds `mymodule.lua` next to `widget.lua`), helper scripts, a README.
 
 Your own widgets live in **`~/.config/deskwidgets/widgets/<id>/`** (`%APPDATA%\DeskWidgets\widgets\<id>\` on
 Windows). A folder there with the same id as a built-in widget replaces it, so you can also fork a built-in one
-by copying `deskwidgets/widgets/<id>` from this repo (or from the installed package) there.
+by copying `widgets/<id>` from this repo there.
 
 ## Quick start
 
@@ -110,7 +110,7 @@ return W
 * `cr` is a Cairo context; the usual C-style Cairo calls are available (`cairo_arc`, `cairo_fill`,
   `cairo_pattern_create_linear`, `cairo_show_text` …, with the `CAIRO_*` constants), exactly as in
   [conky's Cairo bindings](https://github.com/brndnmtthws/conky/wiki/Using-Lua-scripts-in-conky). Most functions are
-  `cairo_<method>(cr, …)` for pycairo's `Context.<method>`.
+  `cairo_<method>(cr, …)` for the Cairo context method of that name (`arc`, `curve_to`, `clip`, `show_text` …).
 * Coordinates are **base units**: a small card is 170×170, medium 356×170, large 356×356 (with the
   default gap). The global “widget size” setting scales everything, you never have to.
 * `L.SIZE` is `'small' | 'medium' | 'large'` — branch on it for different layouts. If a layout is
@@ -176,10 +176,11 @@ return W
 | `L.sys.cpu()`, `.memory()`, `.disks()`, `.disk(path)`, `.net()`, `.battery()`, `.temps()`, `.top(n)`, `.uptime()` | the machine, the same on Linux and Windows (tables below) |
 | `L.service(name)` | latest data of a background service from `"uses"`: `'media'`, `'events'`, `'docker'`, `'batteries'`; `nil` when it is not running |
 | `L.media_control('PlayPause')` | `'PlayPause'`, `'Next'`, `'Previous'` for the current media player |
-| `L.python('fetch.py', args…)`, `L.run({'program', 'arg'})` | run a helper script of this widget / a program in the background, no shell involved |
+| `L.http(url, opts)`, `L.download(url)`, `L.json(text)`, `L.json_encode(v)`, `L.urlencode(s)` | downloads that never block a frame, JSON in and out (see *Getting data from the internet*) |
+| `L.run({'program', 'arg'})`, `L.python('helper.py', args…)` | run a program / a Python helper script of this widget in the background, no shell involved (`L.python` needs Python installed; `L.EXE` is the `deskwidgets` program itself) |
 | `L.open_url(url)`, `L.notify(title, text)` | open a web address or file in the default app; show a notification |
 | `L.tz_offset('Europe/Kyiv')` | seconds east of UTC right now in that time zone |
-| `L.read_file(path)`, `L.read_kv(path)`, `L.fields('a\|b\|c')` | read caches written by a helper script |
+| `L.read_file(path)`, `L.read_kv(path)`, `L.fields('a\|b\|c')` | read files and caches written by a helper program |
 | `L.key(s)` | a file-name-safe key for a string (cache file names) |
 | `L.tr(uk, en)`, `L.day_month(t)`, `L.plural(n, one, few, many)` | language helpers |
 | `L.WEEKDAY`, `L.WEEKDAY_CAP`, `L.WDAY_SHORT`, `L.WEEK_SHORT`, `L.MONTH`, `L.MONTH_GEN` | day and month names |
@@ -199,24 +200,38 @@ return W
 
 ## Getting data from the internet
 
-Never download inside `draw()` or `tick()` — every widget is drawn by the same service, so one slow call freezes
-them all (the log says "a frame took …s"). Start a helper in the background from `tick()` and read what it wrote:
+Never download inside `draw()` or `tick()` by running a program and waiting for it — every widget is drawn by the same
+service, so one slow call freezes them all (the log says "a frame took …s"). `L.http` does the waiting for you: the
+first call starts the download in the background and returns `nil`, every later call returns what has arrived so far,
+and the data is refreshed on its own every `every` seconds.
 
 ```lua
-local CACHE = L.RUN .. L.SEP .. 'my-widget-' .. L.key(L.opt('city', 'Kyiv'))
 local data = {}
+local stamp = -1
 
 function W.tick()
-    if L.DEMO then data = { temp = '21' } return end
-    if L.due('fetch', 900) then L.python('fetch.py', CACHE, L.opt('city', 'Kyiv')) end  -- every 15 min
-    if L.due('read', 30) then data = L.read_kv(CACHE) or {} end
+    if L.DEMO then data = { temp = 21 } return end
+    local url = 'https://wttr.in/' .. L.urlencode(L.opt('city', 'Kyiv')) .. '?format=j1'
+    local body, status, age, st = L.http(url, { every = 900 })          -- every 15 minutes
+    if body and st ~= stamp then          -- `stamp` grows with every successful download: parse only then
+        stamp = st
+        local json = L.json(body)         -- nil, error for bad JSON
+        if json then data = { temp = json.current_condition[1].temp_C } end
+    end
 end
 ```
 
-`fetch.py` runs with the same Python as DeskWidgets (so it works on Windows too, no `python3` lookup) and can
-`import deskwidgets`. It writes `key=value` lines to a temporary file and renames it over the cache, so the
-widget never reads a half-written file. See `widgets/weather/fetch.py`,
-`widgets/anime_schedule/fetch.py` and `examples/github_repo`.
+`L.http(url, opts)` returns `body, status, age, stamp` (`nil, 0, 0, 0` until the first answer). Options: `every`
+(seconds, default 900), `method`, `body` (a string; a body makes it a `POST`), `headers` (a table). A failed download
+is retried after 30 seconds and keeps the old data. `L.json_encode(table)` makes the JSON for a request body.
+
+`L.download(url)` is the same for files: it returns the local path once the file has been downloaded (and `nil`
+before), which `L.image(path)` can draw — pictures in any format. A file is downloaded once and kept.
+
+If you need a program the network answers do not replace (a command-line tool, nmap …), start it with
+`L.run({'program', 'arg'})` and read its output file in `tick()`; `L.python('helper.py', …)` runs a Python script that
+sits next to `widget.lua` (the machine needs Python then). See `widgets/weather/widget.lua`, `widgets/anime_schedule/widget.lua`
+and `examples/github_repo`.
 
 ## Styles and colours
 
