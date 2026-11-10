@@ -7,7 +7,7 @@ name = "deskwidgets"
 dynamic = ["version"]
 description = "macOS-style desktop widgets for Linux and Windows, drawn with Cairo from Lua"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "DeskWidgets contributors" }]
 keywords = ["widgets", "desktop", "cairo", "lua", "linux", "windows"]

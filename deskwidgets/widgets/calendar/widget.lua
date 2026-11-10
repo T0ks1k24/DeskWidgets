@@ -7,6 +7,22 @@ local W = {}
 local WEEKNO = L.opt_bool('week_numbers', true)
 local busy = {}  -- 'YYYY-MM-DD' -> true
 
+-- ISO 8601 week number of the date table `t` (os.date('*t')). os.date('%V') is not portable:
+-- the Windows C runtime rejects it and Lua then raises "invalid conversion specifier".
+local function weeks_in_year(year)
+    local jan1 = os.date('*t', os.time { year = year, month = 1, day = 1, hour = 12 }).wday  -- Sunday = 1
+    local leap = (year % 4 == 0 and year % 100 ~= 0) or year % 400 == 0
+    return (jan1 == 5 or (leap and jan1 == 4)) and 53 or 52   -- a year has 53 weeks if it starts on Thursday (Wednesday when leap)
+end
+
+local function iso_week(t)
+    local weekday = (t.wday + 5) % 7 + 1                       -- Monday = 1 ... Sunday = 7
+    local week = math.floor((t.yday - weekday + 10) / 7)
+    if week < 1 then return weeks_in_year(t.year - 1) end
+    if week > weeks_in_year(t.year) then return 1 end
+    return week
+end
+
 local function load_busy()
     busy = {}
     local data = L.service('events')
@@ -77,7 +93,7 @@ function W.draw(cr, x, y, w, h)
     L.card(cr, x, y, w, h)
     local t = os.date('*t')
     local accent = L.acc(L.SYS.red)
-    local week = L.tr('тиждень ', 'week ') .. tonumber(os.date('%V'))
+    local week = L.tr('тиждень ', 'week ') .. iso_week(t)
 
     if L.SIZE == 'large' then
         L.font(cr, F.bold, 13); L.set(cr, accent)
@@ -107,7 +123,7 @@ function W.draw(cr, x, y, w, h)
     today_block(cr, x, y, t, accent)
     if WEEKNO then
         L.font(cr, F.regular, 11); L.set(cr, C.text3)
-        L.text(cr, L.tr('тиж. ', 'wk ') .. tonumber(os.date('%V')), x + w - PAD, y + 30, 'r')
+        L.text(cr, L.tr('тиж. ', 'wk ') .. iso_week(t), x + w - PAD, y + 30, 'r')
     end
     local colw = (w - 2 * PAD) / 7
     local idx = (t.wday + 5) % 7  -- Monday = 0

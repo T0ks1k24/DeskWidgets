@@ -144,12 +144,27 @@ class ControlServer:
     def stop(self):
         listener, self.listener = self.listener, None
         if listener is not None:
+            if WINDOWS:
+                self._release_pipe()
             try:
                 listener.close()
             except OSError:
                 pass
         if not WINDOWS:
             Path(_family_and_address()[1]).unlink(missing_ok=True)
+
+    def _release_pipe(self):
+        """Windows: PipeListener.close() leaves open the pipe instance the accept thread is waiting on,
+        and while it lives no new listener can take the same pipe name ("Access is denied"; that is
+        what a service restart inside one process, i.e. the tests, runs into). A throw-away
+        connection lets the accept thread finish, so its handle is closed."""
+        from multiprocessing.connection import PipeClient
+        try:
+            PipeClient(_family_and_address()[1]).close()
+        except OSError:
+            pass
+        if self.thread is not None and self.thread is not threading.current_thread():
+            self.thread.join(2)
 
     def _serve(self):
         while self.listener is not None:

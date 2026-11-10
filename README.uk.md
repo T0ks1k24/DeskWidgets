@@ -31,7 +31,7 @@
 
 ## Встановлення
 
-Потрібні Python 3.9+, [pycairo](https://pycairo.readthedocs.io), [lupa](https://github.com/scoder/lupa),
+Потрібні Python 3.12+, [pycairo](https://pycairo.readthedocs.io), [lupa](https://github.com/scoder/lupa),
 [psutil](https://github.com/giampaolo/psutil) і [Pillow](https://python-pillow.org); жодної іншої програми для віджетів.
 
 ### Windows 10 / 11

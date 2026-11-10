@@ -15,7 +15,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-22.04, python: '3.10'}
           - {os: ubuntu-24.04, python: '3.12'}
           - {os: windows-latest, python: '3.12'}
     runs-on: ${{ matrix.os }}

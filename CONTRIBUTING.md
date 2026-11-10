@@ -19,7 +19,7 @@ Thanks for helping! The easiest and most welcome contribution is **a new widget*
 
 ## Code
 
-* Python 3.9+; runtime dependencies are pycairo, lupa, psutil and Pillow only (PyGObject is optional and
+* Python 3.12+; runtime dependencies are pycairo, lupa, psutil and Pillow only (PyGObject is optional and
   imported lazily, only for the GTK gallery and the D-Bus services). No `if sys.platform` outside `platform/`,
   `providers/` and the few places that already have one.
 * Lua: 5.4 (as embedded by lupa; 5.3 works too); keep widgets self-contained, put shared helpers in

@@ -1,4 +1,5 @@
 import json
+import sys
 import threading
 import time
 import unittest
@@ -49,16 +50,21 @@ class DaemonCase(IsolatedTestCase):
     def widgets_on_screen(self):
         return [w for w in self.backend.windows if not w.closed and not w.click_through]
 
+    def runnable_instances(self):
+        """The layout entries that get a window here: a widget for another OS (Events on Windows) stays in
+        the layout but is not started."""
+        return [i for i in self.daemon.layout.instances if self.daemon.types[i['type']].supported]
+
 
 class StartupTests(DaemonCase):
     def test_default_layout_opens_one_presented_window_per_widget(self):
         windows = self.widgets_on_screen()
-        self.assertEqual(len(windows), len(self.daemon.layout.instances))
+        self.assertEqual(len(windows), len(self.runnable_instances()))
         self.assertTrue(all(w.presented >= 1 for w in windows))
         self.assertTrue(all(w.title.startswith('deskwidget:') for w in windows))
 
     def test_windows_sit_on_their_grid_cells(self):
-        for inst in self.daemon.layout.instances:
+        for inst in self.runnable_instances():
             self.assertEqual((self.window_of(inst['id']).x, self.window_of(inst['id']).y),
                              self.daemon.window_xy(inst['col'], inst['row']))
 
@@ -345,6 +351,7 @@ class ControlTests(IsolatedTestCase):
             loop.join(5)
 
 
+@unittest.skipIf(sys.platform == 'win32', 'Unix socket paths: Windows uses a named pipe')
 class AddressTests(unittest.TestCase):
     def test_a_long_runtime_dir_still_gives_a_usable_socket_path(self):
         from pathlib import Path

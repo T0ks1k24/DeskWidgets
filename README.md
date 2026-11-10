@@ -35,7 +35,7 @@ widget is a folder with two files.
 
 ## Install
 
-DeskWidgets needs Python 3.9+, [pycairo](https://pycairo.readthedocs.io), [lupa](https://github.com/scoder/lupa),
+DeskWidgets needs Python 3.12+, [pycairo](https://pycairo.readthedocs.io), [lupa](https://github.com/scoder/lupa),
 [psutil](https://github.com/giampaolo/psutil) and [Pillow](https://python-pillow.org); no other widget program.
 
 ### Windows 10 / 11

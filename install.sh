@@ -41,7 +41,7 @@ if [ "$UNINSTALL" = 1 ]; then
 fi
 
 command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
-python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || { echo "Python 3.9 or newer is required" >&2; exit 1; }
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 12))' || { echo "Python 3.12 or newer is required" >&2; exit 1; }
 
 mkdir -p "$HOME_DIR" "$DEST/bin" "$DEST/share/applications" "$DEST/share/icons/hicolor/scalable/apps"
 python3 -m venv --system-site-packages "$VENV" || { echo "python3-venv is missing (Debian/Ubuntu: sudo apt install python3-venv)" >&2; exit 1; }
