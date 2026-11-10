@@ -30,7 +30,9 @@ class CairoAPI:
                 g['CAIRO_' + name] = int(getattr(cairo, name))
         for name in dir(cairo.Context):
             if not name.startswith('_') and callable(getattr(cairo.Context, name)):
-                g['cairo_' + name] = _method(name)
+                # the unbound method takes the context as its first argument, exactly the shape
+                # of cairo_<name>(cr, ...): no Python wrapper frame per call (a frame makes thousands)
+                g['cairo_' + name] = getattr(cairo.Context, name)
         for name, function in self._functions().items():
             g[name] = function
         # `cairo_text_extents_t:create()` is conky's way to get a table the extents are written into
@@ -104,10 +106,3 @@ class CairoAPI:
             'cairo_font_options_set_hint_metrics': lambda fo, v: fo.set_hint_metrics(v),
             'cairo_font_options_set_subpixel_order': lambda fo, v: fo.set_subpixel_order(v),
         }
-
-
-def _method(name):
-    def call(cr, *args):
-        return getattr(cr, name)(*args)
-    call.__name__ = 'cairo_' + name
-    return call
