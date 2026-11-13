@@ -34,15 +34,19 @@ class TkCase(IsolatedTestCase):
     monitors = None   # the monitors the null backend reports
     settings = {'language': 'en'}   # the texts below are English whatever the machine speaks
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        try:
+            probe = tk.Tk()
+        except tk.TclError as e:
+            raise unittest.SkipTest(f'no display for Tk: {e}')
+        probe.destroy()
+
     def setUp(self):
         super().setUp()
         from deskwidgets.gallery import common, tk_app
         self.tk_app, self.common = tk_app, common
-        try:
-            probe = tk.Tk()
-        except tk.TclError as e:
-            self.skipTest(f'no display for Tk: {e}')
-        probe.destroy()
         paths.SETTINGS.write_text(json.dumps(self.settings))
         self.addCleanup(set_lang, None)
         for target in ('deskwidgets.service.daemon.legacy.stop_old_versions',):
@@ -82,9 +86,23 @@ class TkCase(IsolatedTestCase):
         self.daemon.shutdown()
 
     def gallery(self, configure=None):
-        app = self.tk_app.Gallery(configure)
+        try:
+            app = self.tk_app.Gallery(configure)
+        except tk.TclError as e:
+            if 'init.tcl' not in str(e):
+                raise   # a real problem in the window
+            # Tcl sometimes cannot read its own init.tcl for a moment on a busy Windows runner (seen on CI)
+            time.sleep(1)
+            try:
+                app = self.tk_app.Gallery(configure)
+            except tk.TclError as again:
+                self.skipTest(f'Tcl cannot start here: {again}')
         self.apps.append(app)
         return app
+
+    def shown_ids(self):
+        """What the gallery can list: a widget for another OS (Up next on Windows) stays in the layout but is not shown."""
+        return [i['id'] for i in self.daemon.layout.instances if self.daemon.types[i['type']].supported]
 
     def pump(self, app, seconds=0.15):
         end = time.time() + seconds
@@ -123,7 +141,15 @@ class TkGalleryTests(TkCase):
     def test_my_widgets_lists_what_is_on_the_desktop(self):
         app = self.gallery()
         self.pump(app)
-        self.assertEqual(list(app.mine.get_children()), [i['id'] for i in self.daemon.layout.instances])
+        self.assertEqual(list(app.mine.get_children()), self.shown_ids())
+
+    def test_a_widget_for_another_os_is_not_listed_but_stays_in_the_layout(self):
+        with patch('deskwidgets.core.catalog.OS', 'windows'):   # "Up next" (events) works on Linux only
+            app = self.gallery()
+            self.pump(app)
+            self.assertNotIn('events', app.mine.get_children())
+            self.assertIn('clock', app.mine.get_children())
+        self.assertIn('events', [i['id'] for i in self.daemon.layout.instances])
 
     def test_first_run_sets_up_the_desktop_once(self):
         self.gallery()
