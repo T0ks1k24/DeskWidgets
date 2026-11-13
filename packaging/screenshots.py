@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 """Regenerates docs/screenshots/*.png from real widget renders (sample data).
-Run from the repository: `make screenshots` (needs conky-all and pycairo)."""
+Run from the repository: `make screenshots` (needs pycairo, lupa and Pillow)."""
 import math
 import os
 import sys
@@ -10,24 +10,26 @@ import cairo
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from deskwidgets import catalog, engine, paths, settings  # noqa: E402
+from deskwidgets.core import catalog, settings  # noqa: E402
+from deskwidgets.engine import fonts, render  # noqa: E402
 
 OUT = os.path.join(ROOT, 'docs', 'screenshots')
 TMP = tempfile.mkdtemp(prefix='deskwidgets-shots-')
 PITCH = 186
 types = catalog.discover()
+font_map = fonts.setup(settings.load())
 
 
 def renders(jobs, lang):
     """jobs: {name: (type, size, style, accent, options)}, returns {name: png path}"""
-    procs = {}
+    out = {}
     for name, (t, size, style, accent, opts) in jobs.items():
-        out = os.path.join(TMP, f'{lang}-{name}.png')
-        procs[name] = (out, engine.render(types[t], out, size=size, style=style, accent=accent, lang=lang,
-                                          options=opts, wait=False))
-    for out, proc in procs.values():
-        proc.wait(timeout=40)
-    return {name: out for name, (out, _p) in procs.items()}
+        path = os.path.join(TMP, f'{lang}-{name}.png')
+        if not render.render_png(types[t], path, size=size, style=style, accent=accent, lang=lang, options=opts,
+                                 font_map=font_map):
+            raise SystemExit(f'could not render {t}')
+        out[name] = path
+    return out
 
 
 def wallpaper(w, h):
@@ -143,8 +145,6 @@ def sizes_sheet(lang):
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    paths.ensure_dirs()
-    engine.write_fontconf(settings.load())
     for lang in ('en', 'uk'):
         hero(lang)
         styles_sheet(lang)

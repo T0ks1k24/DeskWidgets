@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.0.0
+
+DeskWidgets no longer needs conky: widgets are drawn by DeskWidgets itself, which is what makes Windows possible.
+
+* **Windows 10/11** support (layered windows, tray icon, autostart, Start-menu entry, `Ctrl+Alt+W`).
+* **Any Linux**: plain Python (pycairo, lupa, psutil, Pillow), no conky, no GNOME-only parts; the GTK 4 gallery is
+  optional (a Tk gallery is used without it); X11 and Xwayland.
+* New **engine**: `widget.lua` runs in an embedded Lua, drawing is Cairo; one service process instead of one conky
+  per widget; widgets can be rendered headless (`deskwidgets preview`), so every widget is tested in CI.
+* Dragging is done by DeskWidgets: drag a widget with the mouse, the grid appears, it snaps on release. The GNOME
+  Shell helper is gone (it is not needed any more); `lock` setting to forbid dragging.
+* Cross-platform widget API: `L.sys` (CPU, memory, disks, network, battery, temperatures, processes), `L.service`
+  (media, events, docker, batteries), `L.run`, `L.python`, `L.open_url`, `L.notify`, `L.tz_offset`. Built-in widgets
+  no longer read `/proc`, run `df`/`upower`/`gdbus` or `bash`. `L.cp`, `L.spawn`, `L.popen` stay for old widgets.
+* New layout: everything is inside the `deskwidgets` Python package (`core`, `engine`, `platform`, `providers`,
+  `service`, `gallery`, `widgets`), installable with pip; control through a local socket instead of D-Bus.
+* Fixes: widgets that did not load an image after it was downloaded, the "OFFLINE" state of the LAN watch showing
+  "all devices known", layout files with odd ids or values could break widgets, a failing widget could take the others
+  down, option values from the gallery are validated, many races around restarting widgets.
+* Widget manifests can say `"platforms": ["linux"]`; the `uses` service `hid-batteries` is now `batteries`.
+* Upgrading: widgets of your own that read `L.RUN/media`, `L.RUN/events`, `L.RUN/docker` must use `L.service(...)`
+  (see docs/creating-widgets.md). Old 1.x/2.x services and conky processes are stopped on first start.
+
 ## 2.0.0 — 2026-10-10
 
 First public release.

@@ -1,83 +1,90 @@
 """Command line: `deskwidgets [command]` (no command = run the service)."""
 import argparse
 import json
-import os
-import shutil
-import subprocess
 import sys
-import time
+from pathlib import Path
 
-from . import VERSION, catalog, paths, settings as settings_mod
-from .i18n import set_lang, tr
-
-
-def _bus():
-    import gi
-    gi.require_version('Gio', '2.0')
-    from gi.repository import Gio, GLib
-    return Gio, GLib, Gio.bus_get_sync(Gio.BusType.SESSION)
+from . import VERSION
+from .core import catalog, paths, settings as settings_mod
+from .core.i18n import set_lang, tr
 
 
-def service_running():
-    Gio, GLib, bus = _bus()
-    reply = bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'NameHasOwner',
-                          GLib.Variant('(s)', (paths.APP_ID,)), GLib.VariantType('(b)'), Gio.DBusCallFlags.NONE, -1, None)
-    return reply.unpack()[0]
+def remote(command, **args):
+    """Sends a command to the service (starting it if needed). Returns the answer, or None after printing why not."""
+    from .service import ipc
+    if not ipc.ensure_running():
+        print(tr('Сервіс DeskWidgets не запустився (журнал: ', 'The DeskWidgets service did not start (log: ')
+              + str(paths.CACHE / 'service.log') + ')', file=sys.stderr)
+        return None
+    try:
+        return ipc.request(command, **args)
+    except (RuntimeError, TimeoutError, ipc.ServiceNotRunning) as e:
+        print(f'deskwidgets: {e}', file=sys.stderr)
+        return None
 
 
-def ensure_service():
-    if service_running():
-        return True
-    subprocess.Popen([paths.bin_path(), 'run'], start_new_session=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(50):
-        time.sleep(0.1)
-        if service_running():
-            return True
-    return False
-
-
-def remote(action, param=None):
-    """Activates an action of the running service (starting it if needed)."""
-    if not ensure_service():
-        print(tr('Сервіс DeskWidgets не запустився', 'The DeskWidgets service did not start'), file=sys.stderr)
+def _remote_status(command, **args):
+    """Exit code for commands that only need to be delivered."""
+    from .service import ipc
+    if not ipc.ensure_running():
+        return 0 if remote(command, **args) is not None else 1
+    try:
+        ipc.request(command, **args)
+        return 0
+    except (RuntimeError, TimeoutError, ipc.ServiceNotRunning) as e:
+        print(f'deskwidgets: {e}', file=sys.stderr)
         return 1
-    Gio, GLib, bus = _bus()
-    Gio.DBusActionGroup.get(bus, paths.APP_ID, paths.APP_PATH).activate_action(action, param)
-    bus.flush_sync(None)
-    return 0
 
 
 def _layout():
     try:
-        with open(paths.LAYOUT, encoding='utf-8') as f:
-            return json.load(f).get('instances', [])
-    except (OSError, ValueError):
+        return json.loads(paths.LAYOUT.read_text(encoding='utf-8')).get('instances', [])
+    except (OSError, ValueError, AttributeError):
         return []
 
 
 def cmd_run(_a):
-    from .service import run
+    from .service.daemon import run
     return run()
 
 
 def cmd_gallery(a):
-    from .gallery import main
-    return main(['--configure', a.id] if getattr(a, 'id', None) else [])
+    try:
+        from .gallery import main as gallery_main
+    except (ImportError, ValueError) as e:
+        print(tr('Для галереї потрібні PyGObject, GTK 4 і libadwaita (', 'The gallery needs PyGObject, GTK 4 and libadwaita (')
+              + f'{e}); deskwidgets doctor', file=sys.stderr)
+        return 1
+    return gallery_main(['--configure', a.id] if getattr(a, 'id', None) else [])
 
 
 def cmd_add(a):
-    from gi.repository import GLib
-    return remote('add', GLib.Variant('s', a.type))
+    return _remote_status('add', type=a.type)
 
 
 def cmd_remove(a):
-    from gi.repository import GLib
-    return remote('remove', GLib.Variant('s', a.id))
+    return _remote_status('remove', id=a.id)
 
 
 def cmd_simple(a):
-    return remote(a.command)
+    if a.command == 'quit':
+        from .service import ipc
+        if not ipc.is_running():
+            return 0
+    return _remote_status(a.command)
+
+
+def cmd_notify(a):
+    return _remote_status('notify', title=a.title, body=a.body)
+
+
+def cmd_status(_a):
+    from .service import ipc
+    if not ipc.is_running():
+        print(tr('Сервіс не запущено', 'The service is not running'))
+        return 1
+    print(json.dumps(ipc.request('status'), indent=2, ensure_ascii=False))
+    return 0
 
 
 def cmd_list(_a):
@@ -89,138 +96,93 @@ def cmd_list(_a):
 def cmd_types(_a):
     for t in sorted(catalog.discover().values(), key=lambda t: (t.category, t.id)):
         where = tr('мій', 'mine') if t.user else tr('вбудований', 'built-in')
-        print(f'{t.id:16} {t.title:28} {",".join(t.sizes):22} {catalog.category_name(t.category)} · {where}')
+        note = '' if t.supported else '  [' + tr('не в цій системі', 'not on this system') + ']'
+        print(f'{t.id:16} {t.title:28} {",".join(t.sizes):22} {catalog.category_name(t.category)} · {where}{note}')
     return 0
 
 
 def cmd_new(a):
-    from . import scaffold
+    from .core import scaffold
     try:
         folder = scaffold.create(a.id, a.name)
     except FileExistsError as e:
         print(tr('Вже існує: ', 'Already exists: ') + str(e), file=sys.stderr)
         return 1
     print(folder)
-    print(tr(f'Відредагуйте widget.lua, потім: deskwidgets reload && deskwidgets add {os.path.basename(folder)}',
-             f'Edit widget.lua, then: deskwidgets reload && deskwidgets add {os.path.basename(folder)}'))
+    print(tr(f'Відредагуйте widget.lua, потім: deskwidgets reload && deskwidgets add {Path(folder).name}',
+             f'Edit widget.lua, then: deskwidgets reload && deskwidgets add {Path(folder).name}'))
     return 0
 
 
 def cmd_preview(a):
-    from . import engine
-    types = catalog.discover()
-    t = types.get(a.type)
+    from .engine import render
+    t = catalog.discover().get(a.type)
     if t is None:
         print(tr('Немає такого віджета: ', 'No such widget: ') + a.type, file=sys.stderr)
         return 1
     s = settings_mod.load()
-    paths.ensure_dirs()
-    engine.write_fontconf(s)
-    out = os.path.abspath(a.output or f'{t.id}-{a.size or t.size}.png')
-    ok = engine.render(t, out, size=a.size, style=a.style, accent=a.accent, lang=a.lang or settings_mod.language(s),
-                       scale=a.scale, demo=not a.live)
+    options = {}
+    for item in a.option:
+        key, _, text = item.partition('=')
+        option = t.option(key)
+        if option is None:
+            print(tr('У віджета немає параметра ', 'The widget has no option ') + key, file=sys.stderr)
+            return 1
+        try:
+            options[key] = option.coerce(text == 'true' if option.type == 'bool' else text)
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 1
+    out = Path(a.output or f'{t.id}-{a.size or t.size}.png').resolve()
+    ok = render.render_png(t, out, size=a.size, style=a.style, accent=a.accent, lang=a.lang or settings_mod.language(s),
+                           scale=a.scale, demo=not a.live, settings=s, options=options)
     print(out if ok else tr('Не вдалося відрендерити', 'Rendering failed'))
     return 0 if ok else 1
 
 
-def render_thumbnails(types=None, lang=None):
-    """Renders all thumbnails at once to ~/.cache/deskwidgets/previews/<version>/<lang>/<type>.png."""
-    from . import engine
-    s = settings_mod.load()
-    lang = lang or settings_mod.language(s)
-    paths.ensure_dirs()
-    engine.write_fontconf(s)
-    out_dir = os.path.join(paths.PREVIEWS, VERSION, lang)
-    os.makedirs(out_dir, exist_ok=True)
-    jobs = [(t, engine.render(t, os.path.join(out_dir, f'{t.id}.png'), lang=lang, wait=False))
-            for t in (types or catalog.discover()).values()]
-    ok = True
-    for t, proc in jobs:
-        try:
-            proc.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-        ok &= os.path.exists(os.path.join(out_dir, f'{t.id}.png'))
-    return ok
-
-
-def cmd_previews(_a):
-    return 0 if render_thumbnails() else 1
+def cmd_previews(a):
+    """Gallery thumbnails, one PNG per widget (the gallery runs this in a separate process)."""
+    from .engine import render
+    lang = a.lang or settings_mod.language()
+    types = catalog.discover()
+    if a.only:
+        types = {k: t for k, t in types.items() if k in a.only.split(',')}
+    return 0 if render.render_all(paths.PREVIEWS / VERSION / lang, lang, types=types, settings=settings_mod.load()) else 1
 
 
 def cmd_setup(a):
-    from . import desktop
-    done = desktop.setup(autostart=not a.no_autostart, hotkey=not a.no_hotkey, extension=not a.no_extension)
+    from .platform import integration
+    done = integration.setup(autostart=not a.no_autostart, hotkey=not a.no_hotkey)
     s = settings_mod.load()
-    s.update({'autostart': not a.no_autostart, 'hotkey': not a.no_hotkey, 'grid_overlay': not a.no_extension,
-              '_setup_done': True})
+    s.update({'autostart': not a.no_autostart, 'hotkey': not a.no_hotkey, '_setup_done': True})
     settings_mod.save(s)
     for k, v in done.items():
         print(f'{k}: {"ok" if v else "-"}')
-    if done.get('extension'):
-        print(tr('Підказка-сітка GNOME запрацює після повторного входу в систему.',
-                 'The GNOME grid helper starts working after you log out and back in.'))
     return 0
 
 
 def udev_command():
-    rules = os.path.join(paths.DATA, 'data', 'udev', '70-deskwidgets-hid.rules')
-    return (f'sudo install -m 644 {rules} /etc/udev/rules.d/ && sudo udevadm control --reload '
+    return (f'sudo install -m 644 {paths.UDEV_RULES} /etc/udev/rules.d/ && sudo udevadm control --reload '
             f'&& sudo udevadm trigger --subsystem-match=hidraw')
 
 
 def cmd_mice(_a):
-    from . import hidbattery
-    code = hidbattery.main()
-    if any(not d['access'] for d in hidbattery.find()):
+    from .providers import hid_mice
+    code = hid_mice.main()
+    if any(not d['access'] for d in hid_mice.find()):
         print(tr('Щоб читати заряд миші без root, один раз виконайте:', 'To read the mouse battery without root, run once:'))
         print('  ' + udev_command())
     return code
 
 
 def cmd_doctor(_a):
-    from . import desktop, hidbattery
-    ok = True
-
-    def row(name, good, note=''):
-        nonlocal ok
-        ok &= bool(good) or note.startswith('(')
-        print(f"{'✔' if good else '✘'} {name}{(' — ' + note) if note else ''}")
-
-    conky = shutil.which('conky')
-    row('conky', conky, tr('встановіть conky-all', 'install conky-all') if not conky else '')
-    if conky:
-        info = subprocess.run(['conky', '-v'], capture_output=True, text=True).stdout
-        row(tr('conky з Lua/Cairo', 'conky with Lua/Cairo'), 'Cairo' in info, tr('потрібен пакет conky-all', 'needs conky-all'))
-    for mod, ver, pkg in (('Gtk', '4.0', 'gir1.2-gtk-4.0'), ('Adw', '1', 'gir1.2-adw-1'), ('GdkPixbuf', '2.0', 'gir1.2-gdkpixbuf-2.0'),
-                          ('ECal', '2.0', 'gir1.2-ecal-2.0 (' + tr('лише для «Події»', 'only for "Up next"') + ')')):
-        try:
-            import gi
-            gi.require_version(mod, ver)
-            __import__('gi.repository.' + mod)
-            row(f'{mod} {ver}', True)
-        except (ImportError, ValueError):
-            row(f'{mod} {ver}', False, pkg if '(' not in pkg else '(' + pkg)
-    s = settings_mod.load()
-    font = subprocess.run(['fc-list', s['font']], capture_output=True, text=True).stdout.strip()
-    row(tr('шрифт ', 'font ') + s['font'], font, tr('буде запасний sans-serif', 'a fallback sans-serif will be used'))
-    cjk = subprocess.run(['fc-list', ':lang=ja'], capture_output=True, text=True).stdout.strip()
-    row(tr('японський шрифт (аніме-віджети)', 'Japanese font (anime widgets)'), cjk, '(fonts-noto-cjk)')
-    for tool, why in (('nmap', tr('перевірка мережі', 'LAN watch')), ('docker', 'Docker'), ('upower', tr('батарея', 'batteries'))):
-        row(tool, shutil.which(tool), f'({tr("необов’язково", "optional")}: {why})')
-    for m in hidbattery.find():
-        row(tr('заряд миші ', 'mouse battery ') + m['name'], m['access'],
-            tr('потрібне правило udev, виконайте: ', 'needs the udev rule, run: ') + udev_command())
-    row(tr('сервіс працює', 'service running'), service_running(), f'({tr("запустіть", "start it")}: deskwidgets)')
-    row(tr('підказка-сітка GNOME', 'GNOME grid helper'), desktop.extension_state() == 'active', f'({desktop.extension_state()})')
-    print(f'{tr("Віджети", "Widgets")}: {paths.BUILTIN_WIDGETS}  ·  {tr("мої", "mine")}: {paths.USER_WIDGETS}')
-    return 0 if ok else 1
+    from .core.doctor import run_checks
+    return run_checks()
 
 
-def main(argv=None):
-    set_lang(settings_mod.language())
+def build_parser():
     p = argparse.ArgumentParser(prog='deskwidgets', description=tr(
-        'Віджети робочого столу в стилі macOS (conky).', 'macOS-style desktop widgets for Linux (conky).'))
+        'Віджети робочого столу в стилі macOS для Linux і Windows.', 'macOS-style desktop widgets for Linux and Windows.'))
     p.add_argument('--version', action='version', version=f'deskwidgets {VERSION}')
     sub = p.add_subparsers(dest='command')
     sub.add_parser('run', help=tr('запустити сервіс (за замовчуванням)', 'run the service (default)')).set_defaults(func=cmd_run)
@@ -235,6 +197,7 @@ def main(argv=None):
                     ('reload', tr('перечитати віджети й перезапустити', 're-read widget folders and restart')),
                     ('quit', tr('зупинити сервіс', 'stop the service'))):
         sub.add_parser(name, help=h).set_defaults(func=cmd_simple)
+    sub.add_parser('status', help=tr('стан сервісу', 'state of the service')).set_defaults(func=cmd_status)
     sub.add_parser('list', help=tr('віджети на столі', 'widgets on the desktop')).set_defaults(func=cmd_list)
     sub.add_parser('types', help=tr('усі доступні віджети', 'all available widgets')).set_defaults(func=cmd_types)
     c = sub.add_parser('new', help=tr('створити свій віджет', 'create your own widget'))
@@ -243,14 +206,26 @@ def main(argv=None):
     c.add_argument('type'); c.add_argument('--size', choices=list(catalog.SIZES)); c.add_argument('--style')
     c.add_argument('--accent'); c.add_argument('--lang', choices=['uk', 'en']); c.add_argument('--scale', type=float, default=1.0)
     c.add_argument('--live', action='store_true', help=tr('справжні дані замість прикладу', 'real data instead of sample data'))
+    c.add_argument('--option', action='append', default=[], metavar='KEY=VALUE',
+                   help=tr('значення параметра віджета (можна кілька разів)', 'a widget option value (repeatable)'))
     c.add_argument('-o', '--output'); c.set_defaults(func=cmd_preview)
-    sub.add_parser('previews', help=tr('оновити мініатюри галереї', 'refresh gallery thumbnails')).set_defaults(func=cmd_previews)
-    c = sub.add_parser('setup', help=tr('автозапуск, гаряча клавіша, підказка-сітка', 'autostart, hotkey, grid helper'))
+    c = sub.add_parser('previews', help=tr('оновити мініатюри галереї', 'refresh gallery thumbnails'))
+    c.add_argument('--lang', choices=['uk', 'en'])
+    c.add_argument('--only', help=tr('лише ці віджети (через кому)', 'only these widgets (comma separated)'))
+    c.set_defaults(func=cmd_previews)
+    c = sub.add_parser('setup', help=tr('автозапуск, гаряча клавіша, пункт меню', 'autostart, hotkey, menu entry'))
     c.add_argument('--no-autostart', action='store_true'); c.add_argument('--no-hotkey', action='store_true')
-    c.add_argument('--no-extension', action='store_true'); c.set_defaults(func=cmd_setup)
+    c.set_defaults(func=cmd_setup)
+    c = sub.add_parser('notify', help=tr('показати сповіщення', 'show a notification'))
+    c.add_argument('title'); c.add_argument('body', nargs='?', default=''); c.set_defaults(func=cmd_notify)
     sub.add_parser('doctor', help=tr('перевірити залежності', 'check dependencies')).set_defaults(func=cmd_doctor)
     sub.add_parser('mice', help=tr('заряд бездротових ігрових мишей', 'battery of wireless gaming mice')).set_defaults(func=cmd_mice)
-    a = p.parse_args(argv)
-    if not getattr(a, 'func', None):
-        return cmd_run(a)
-    return a.func(a) or 0
+    return p
+
+
+def main(argv=None):
+    set_lang(settings_mod.language())
+    args = build_parser().parse_args(argv)
+    if not getattr(args, 'func', None):
+        return cmd_run(args) or 0
+    return args.func(args) or 0

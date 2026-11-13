@@ -10,16 +10,43 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, python: '3.12'}
+          - {os: windows-latest, python: '3.12'}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: System packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libcairo2-dev pkg-config libgirepository1.0-dev fonts-dejavu-core
+      - name: Python packages
+        run: python -m pip install pytest pycairo lupa psutil pillow tzdata
+      - name: Tests (Linux, with a virtual X display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m pytest -q
+      - name: Tests (Windows)
+        if: runner.os == 'Windows'
+        run: python -m pytest -q
+
   deb:
+    needs: test
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends lua5.4 nodejs fakeroot
-
-      - name: Check
-        run: make check
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fakeroot
 
       - name: Build .deb
         run: make deb

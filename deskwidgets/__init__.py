@@ -1,3 +1,3 @@
-"""DeskWidgets: macOS-style desktop widgets for Linux, drawn by conky, managed from Python."""
+"""DeskWidgets: macOS-style desktop widgets for Linux and Windows, drawn with Cairo from Lua."""
 
-VERSION = '2.0.0'
+VERSION = '3.0.0'

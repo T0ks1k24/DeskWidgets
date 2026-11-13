@@ -4,20 +4,20 @@ Section: x11
 Priority: optional
 Architecture: all
 Installed-Size: @SIZE@
-Depends: conky-all, python3 (>= 3.10), python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), gir1.2-gdkpixbuf-2.0, fontconfig
-Recommends: fonts-ubuntu | fonts-inter, fonts-noto-cjk, gir1.2-ecal-2.0, gir1.2-edataserver-1.2, upower, libnotify-bin
-Suggests: nmap, docker.io, gnome-shell-extension-prefs
+Depends: python3 (>= 3.12), python3-cairo, python3-lupa, python3-psutil, python3-pil, tzdata, fontconfig, libx11-6
+Recommends: python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), fonts-ubuntu | fonts-inter, fonts-noto-cjk, gir1.2-ecal-2.0, gir1.2-edataserver-1.2, upower, libnotify-bin, libxext6
+Suggests: python3-tk, nmap, docker.io
 Maintainer: DeskWidgets contributors <deskwidgets@users.noreply.github.com>
 Homepage: https://github.com/T0ks1k24/DeskWidgets
-Description: macOS-style desktop widgets for Linux
+Description: macOS-style desktop widgets for Linux and Windows
  DeskWidgets puts small, good-looking cards on your desktop — clocks, calendar,
  weather, system monitors, now playing, events, notes, countdowns, exchange rates,
  Docker and anime widgets (AniList schedule, manga clock, anime buddy).
  .
- Widgets snap to a grid (Super + drag), come in three sizes and nine styles
- (glass, graphite, light, colour, sakura, manga, neon, borderless) with any
- accent colour, and each one has its own settings. A widget is just a folder
+ Widgets snap to a grid (drag them with the mouse), come in three sizes and nine
+ styles (glass, graphite, light, colour, sakura, manga, neon, borderless) with
+ any accent colour, and each one has its own settings. A widget is just a folder
  with widget.json and widget.lua, so writing your own is easy.
  .
- Runs on X11 and Wayland (through Xwayland); a GNOME Shell helper shows the grid
- while dragging.
+ Runs on X11 and Wayland (through Xwayland); widgets are drawn by DeskWidgets
+ itself with Cairo, no other desktop-widget program is needed.

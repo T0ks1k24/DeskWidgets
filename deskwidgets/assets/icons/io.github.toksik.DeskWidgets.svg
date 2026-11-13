@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>DeskWidgets</title>
+  <desc>A compact grid of lavender, mint and white desktop widgets on an indigo tile.</desc>
+  <defs>
+    <linearGradient id="base" x1="20" y1="8" x2="108" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#393956"/>
+      <stop offset="1" stop-color="#202033"/>
+    </linearGradient>
+    <linearGradient id="lavender" x1="20" y1="24" x2="64" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DDD5FF"/>
+      <stop offset="1" stop-color="#B6A4F5"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="72" y1="24" x2="108" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8F5E3"/>
+      <stop offset="1" stop-color="#8FE0C3"/>
+    </linearGradient>
+  </defs>
+  <!-- A shallow lower edge gives the launcher icon a grounded silhouette. -->
+  <rect x="8" y="12" width="112" height="112" rx="28" fill="#151522"/>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#base)"/>
+  <rect x="8.5" y="8.5" width="111" height="111" rx="27.5" fill="none" stroke="#FFFFFF" stroke-opacity=".1"/>
+  <!-- Three sizes, one grid: the app's central idea. -->
+  <rect x="20" y="24" width="44" height="76" rx="12" fill="url(#lavender)"/>
+  <rect x="72" y="24" width="36" height="34" rx="11" fill="url(#mint)"/>
+  <rect x="72" y="66" width="36" height="34" rx="11" fill="#F3F1FA"/>
+  <!-- Clock widget. -->
+  <circle cx="42" cy="47" r="13" fill="none" stroke="#474064" stroke-width="3"/>
+  <path d="M42 39v8l5 3" fill="none" stroke="#474064" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="30" y="75" width="24" height="4" rx="2" fill="#51466F"/>
+  <rect x="30" y="84" width="16" height="4" rx="2" fill="#51466F" fill-opacity=".4"/>
+  <!-- Live activity widget. -->
+  <path d="M81 44v-5m9 9V34m9 10v-7" fill="none" stroke="#286655" stroke-width="4" stroke-linecap="round"/>
+  <!-- Calendar widget. -->
+  <path d="M82 76h16" fill="none" stroke="#89839F" stroke-width="3" stroke-linecap="round"/>
+  <g fill="#665787">
+    <rect x="81" y="83" width="6" height="6" rx="2"/>
+    <rect x="93" y="83" width="6" height="6" rx="2"/>
+  </g>
+</svg>
