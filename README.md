@@ -137,7 +137,7 @@ packaging/              .deb build, screenshots
 
 * [conky](https://github.com/brndnmtthws/conky) draws everything.
 * Icons: [Material Design Icons](https://pictogrammers.com/library/mdi/) (Pictogrammers Free License / Apache 2.0, bundled in `fonts/`).
-* Data: [wttr.in](https://wttr.in), [AniList](https://anilist.co), [National Bank of Ukraine](https://bank.gov.ua/en/open-data/api-dev).
+* Data: [wttr.in](https://wttr.in), [AniList](https://anilist.co).
 
 ## License
 
