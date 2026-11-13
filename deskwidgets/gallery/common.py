@@ -7,6 +7,7 @@ them up, so pictures are made by `deskwidgets preview(s)` child processes.
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .. import VERSION
@@ -39,6 +40,45 @@ def read_layout():
 def window_px(size):
     """Size in pixels of a widget at 100 %, for sizing thumbnails."""
     return Grid(1920, 1080, {**settings_mod.DEFAULTS, 'scale': 1.0}).window_px(size)
+
+
+def monitors():
+    """The connected monitors as the service lists them: [{'id', 'label', 'primary', 'enabled'}]. Empty when
+    the service is not running (or is too old to know), so the gallery just leaves the monitor choices out."""
+    try:
+        if ipc.is_running():
+            answer = ipc.request('monitors', timeout=CALL_TIMEOUT)
+            if isinstance(answer, list):
+                return [m for m in answer if isinstance(m, dict) and isinstance(m.get('id'), str)]
+    except (RuntimeError, TimeoutError, ipc.ServiceNotRunning):
+        pass
+    return []
+
+
+def service_outdated():
+    """True when the running service does not know a command this gallery uses: it was started before an
+    upgrade and still runs the old code (a service is not restarted by an upgrade, only by a new login)."""
+    try:
+        ipc.request('monitors', timeout=CALL_TIMEOUT)
+    except RuntimeError as e:
+        return 'unknown command' in str(e)
+    except (TimeoutError, ipc.ServiceNotRunning):
+        pass
+    return False
+
+
+def restart_service(stop_wait=8.0):
+    """Stops the running service and starts a fresh one. Blocks for a few seconds: run it off the UI thread.
+    True when the new service answers."""
+    if ipc.is_running():
+        try:
+            ipc.request('quit', timeout=CALL_TIMEOUT)
+        except (RuntimeError, TimeoutError, ipc.ServiceNotRunning):
+            pass
+        deadline = time.monotonic() + stop_wait
+        while ipc.is_running() and time.monotonic() < deadline:
+            time.sleep(0.2)
+    return ipc.ensure_running()
 
 
 def thumbs_dir(lang=None):

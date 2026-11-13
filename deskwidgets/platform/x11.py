@@ -20,6 +20,7 @@ import traceback
 
 import cairo
 
+from ..core.monitors import Monitor, ordered
 from ..core.util import log
 from . import x11_xlib as xl
 from .base import Backend, TimerQueue, Window
@@ -62,6 +63,13 @@ def _on_x_error(display, event):
 
 
 _ERROR_HANDLER = xl.ERROR_HANDLER(_on_x_error)   # must stay referenced for as long as Xlib may call it
+
+
+def contains(outer, inner):
+    """True when the (x, y, width, height) rectangle `outer` covers `inner` and is bigger than it."""
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return outer != inner and ox <= ix and oy <= iy and ox + ow >= ix + iw and oy + oh >= iy + ih
 
 
 def parse_xft_dpi(resources):
@@ -291,7 +299,7 @@ class X11Backend(Backend):
         # screen size changes show up as ConfigureNotify on the root; DPI changes as its RESOURCE_MANAGER property
         xlib.XSelectInput(dpy, self.root, xl.STRUCTURE_NOTIFY_MASK | xl.PROPERTY_CHANGE_MASK)
         self._init_randr()
-        self._screen_state = (self.work_area(), self.dpi_scale())
+        self._screen_state = self.monitors()
 
     def _argb_visual(self):
         """A 32-bit TrueColor visual laid out like cairo's ARGB32 (the masks are checked, not assumed)."""
@@ -508,7 +516,7 @@ class X11Backend(Backend):
             self._guard(f'{window.title}: on_closed', window.on_closed)
 
     def _check_screen(self):
-        state = (self.work_area(), self.dpi_scale())
+        state = self.monitors()
         if state != self._screen_state:
             self._screen_state = state
             if self.on_screen_changed is not None:
@@ -518,7 +526,20 @@ class X11Backend(Backend):
     def work_area(self):
         """The primary monitor, or the whole X screen when XRandR cannot say which that is. The service
         applies its own margins from the settings, so panels and docks are deliberately not subtracted."""
-        return self._primary_monitor() or (0,) * 2 + self._screen_size()
+        return self.monitors()[0].rect
+
+    def monitors(self):
+        """The XRandR monitors, the primary one first (the one at the origin when none is marked, else the
+        first). Without XRandR 1.5 the whole X screen is the one monitor."""
+        found = self._randr_monitors()
+        if not found:
+            width, height = self._screen_size()
+            return [Monitor('screen', 0, 0, width, height, True, self.dpi_scale())]
+        if not any(primary for _name, primary, _geometry in found):
+            origin = next((i for i, (_n, _p, g) in enumerate(found) if g[:2] == (0, 0)), 0)
+            found[origin] = (found[origin][0], True, found[origin][2])
+        scale = self.dpi_scale()
+        return ordered(Monitor(name, *geometry, primary, scale) for name, primary, geometry in found)
 
     def _screen_size(self):
         root, x, y, w, h, border, depth = (ctypes.c_ulong(), ctypes.c_int(), ctypes.c_int(), ctypes.c_uint(),
@@ -526,23 +547,37 @@ class X11Backend(Backend):
         self._x.XGetGeometry(self.dpy, self.root, *map(ctypes.byref, (root, x, y, w, h, border, depth)))
         return (w.value, h.value)
 
-    def _primary_monitor(self):
+    def _randr_monitors(self):
+        """[(name, primary, (x, y, width, height))] from XRandR, [] when it cannot say."""
         if self._xrandr is None:
-            return None
+            return []
         count = ctypes.c_int()
         monitors = self._xrandr.XRRGetMonitors(self.dpy, self.root, 1, ctypes.byref(count))
         if not monitors:
-            return None
+            return []
+        found, names = [], set()
         try:
-            found = [(bool(m.primary), (m.x, m.y, m.width, m.height)) for m in monitors[:count.value]
-                     if m.width > 0 and m.height > 0]
+            for m in monitors[:count.value]:
+                if m.width <= 0 or m.height <= 0:
+                    continue
+                name = self._atom_name(m.name) or f'monitor{len(found) + 1}'
+                while name in names:   # ids must be unique to be settings
+                    name += '+'
+                names.add(name)
+                found.append((name, bool(m.primary), (m.x, m.y, m.width, m.height)))
         finally:
             self._xrandr.XRRFreeMonitors(monitors)
-        for primary, geometry in found:
-            if primary:
-                return geometry
-        # no primary set: the monitor at the origin, else the first one
-        return next((g for _, g in found if g[:2] == (0, 0)), found[0][1] if found else None)
+        # a monitor that covers other monitors is a span over them (a user-defined "whole screen"), not a display
+        return [m for m in found if not any(o is not m and contains(m[2], o[2]) for o in found)]
+
+    def _atom_name(self, atom):
+        pointer = self._x.XGetAtomName(self.dpy, atom) if atom else None
+        if not pointer:
+            return ''
+        try:
+            return ctypes.string_at(pointer).decode('utf-8', 'replace')
+        finally:
+            self._x.XFree(pointer)
 
     def dpi_scale(self):
         """`Xft.dpi` / 96 when the desktop sets it (1.0 below 96 dpi, at most 3.0). X reports a physical

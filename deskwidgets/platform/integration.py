@@ -174,17 +174,52 @@ def is_gnome():
     return 'GNOME' in os.environ.get('XDG_CURRENT_DESKTOP', '').upper() and shutil.which('gsettings') is not None
 
 
+def _custom_keybindings():
+    """The list of custom GNOME shortcut paths, or None when it cannot be read."""
+    raw = _gsettings('get', MEDIA_KEYS, 'custom-keybindings')
+    if raw is None:
+        return None
+    try:
+        return list(ast.literal_eval(raw.removeprefix('@as ')))
+    except (ValueError, SyntaxError):
+        return None
+
+
+def _keybinding_schema():
+    return f'{MEDIA_KEYS}.custom-keybinding:{KEYBINDING_PATH}'
+
+
+def hotkey_state():
+    """What GNOME has for our shortcut: {'registered', 'binding', 'command', 'wanted'}; None off GNOME."""
+    if not is_gnome():
+        return None
+    current = _custom_keybindings()
+    state = {'registered': current is not None and KEYBINDING_PATH in current, 'binding': '', 'command': '',
+             'wanted': _shell_command('gallery')}
+    if state['registered']:
+        for key in ('binding', 'command'):
+            state[key] = (_gsettings('get', _keybinding_schema(), key) or '').strip("'")
+    return state
+
+
+def refresh_hotkey():
+    """Our shortcut points at the Python that created it. After a reinstall or a move that path is gone and the
+    key silently does nothing, so the service points it at itself on every start. Only the command is touched:
+    the key combination (which you may have changed in GNOME Settings) and a shortcut you deleted stay as they are.
+    Returns True when the command was changed."""
+    state = hotkey_state()
+    if not state or not state['registered'] or state['command'] == state['wanted']:
+        return False
+    return _gsettings('set', _keybinding_schema(), 'command', state['wanted']) is not None
+
+
 def set_hotkey(enabled):
     if not is_gnome():
         return False
-    raw = _gsettings('get', MEDIA_KEYS, 'custom-keybindings')
-    if raw is None:
+    current = _custom_keybindings()
+    if current is None:
         return False
-    try:
-        current = list(ast.literal_eval(raw.removeprefix('@as ')))
-    except (ValueError, SyntaxError):
-        return False
-    schema = f'{MEDIA_KEYS}.custom-keybinding:{KEYBINDING_PATH}'
+    schema = _keybinding_schema()
     if enabled:
         for key, value in (('name', tr('Віджети робочого столу', 'Desktop widgets')),
                            ('command', _shell_command('gallery')), ('binding', HOTKEY)):

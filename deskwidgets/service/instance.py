@@ -22,6 +22,8 @@ class WidgetInstance:
         self.settle_timer = None
         self.offset = (0, 0)        # where the window manager put the window relative to where we asked
         self.requested = (0, 0)
+        self.monitor = None         # the monitor the window is on (its grid sets the window's size)
+        self.size_px = (0, 0)
         self._press = None          # (root_x, root_y, window position) while the left button is down
         self._dragging = False
         self._slow_reported = False
@@ -44,8 +46,9 @@ class WidgetInstance:
         inst, t = self.inst, self.wtype
         if self.window is not None or inst is None or t is None or not t.supported:
             return
-        grid = self.d.grid
-        size_px = grid.window_px(inst['size'])
+        self.monitor = self.d.screen_of(inst['monitor']).monitor.id
+        grid = self.d.screen_of(self.monitor).grid
+        self.size_px = size_px = grid.window_px(inst['size'])
         ctx = WidgetContext(inst, t, lang=self.d.lang, scale=grid.scale, size_px=size_px, fonts=self.d.fonts,
                             sysinfo=self.d.sysinfo, images=self.d.images, services=self.d.hub, notify=self.d.notify)
         try:
@@ -53,7 +56,7 @@ class WidgetInstance:
         except Exception as e:   # Lua failed to even start: the other widgets carry on
             log(f'{self.id}: {e}')
             return
-        self.requested = self.d.window_xy(inst['col'], inst['row'])
+        self.requested = self.d.window_xy(inst['col'], inst['row'], self.monitor)
         self.window = self.d.backend.create_window(f'deskwidget:{self.id}', *size_px, *self.requested)
         self.window.on_button = self._on_button
         self.window.on_motion = self._on_motion
@@ -106,9 +109,20 @@ class WidgetInstance:
         self.timer = self.d.backend.call_later(0.05, self._frame)
 
     # position
+    def relocate(self):
+        """The layout moved this widget (a drop, `move`): put the window where it says. Another monitor can have
+        another DPI, hence another size, so the widget starts over there."""
+        inst = self.inst
+        if inst is None:
+            return
+        if self.d.screen_of(inst['monitor']).monitor.id != self.monitor:
+            self.restart()
+        else:
+            self.place(inst['col'], inst['row'])
+
     def place(self, col, row):
-        """Moves the window onto a cell."""
-        x, y = self.d.window_xy(col, row)
+        """Moves the window onto a cell of its monitor."""
+        x, y = self.d.window_xy(col, row, self.monitor)
         self.requested = (x, y)
         if self.window:
             self.window.move(x + self.offset[0], y + self.offset[1])

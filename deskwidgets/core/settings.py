@@ -8,11 +8,12 @@ from .util import write_atomic
 
 DEFAULTS = {
     'language': 'auto',        # auto | uk | en
-    'scale': 1.0,              # size of every widget, 0.6-2.0
+    'scale': 1.0,              # size of every widget, 0.5-1.2; the grid follows (a cell is a small card)
     'gap': 16,                 # px between widgets
     'margin_top': 44,          # first grid row starts below the top bar
     'margin_bottom': 88,       # keep free for a dock or the taskbar
     'margin_side': 24,
+    'monitors': [],            # ids of the monitors that show widgets; [] = the primary one
     'font': 'auto',            # text font family; auto = the system's UI font
     'default_style': 'auto',   # style for new widgets, auto = the widget's own
     'default_accent': 'auto',
@@ -22,7 +23,7 @@ DEFAULTS = {
     'lock': False,             # widgets cannot be dragged
 }
 
-LIMITS = {'scale': (0.6, 2.0), 'gap': (0, 64), 'margin_top': (0, 400), 'margin_bottom': (0, 400),
+LIMITS = {'scale': (0.5, 1.2), 'gap': (0, 64), 'margin_top': (0, 400), 'margin_bottom': (0, 400),
           'margin_side': (0, 400)}
 
 
@@ -45,6 +46,9 @@ def load():
     for key in ('autostart', 'hotkey', 'show_grid', 'lock'):
         if not isinstance(data[key], bool):
             data[key] = DEFAULTS[key]
+    if not (isinstance(data['monitors'], list) and all(isinstance(m, str) and m for m in data['monitors'])):
+        data['monitors'] = []
+    data['monitors'] = list(data['monitors'])   # not the list inside DEFAULTS
     return data
 
 

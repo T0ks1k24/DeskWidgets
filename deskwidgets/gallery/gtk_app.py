@@ -2,7 +2,7 @@
 
 * My widgets: what is on the desktop. Open settings or remove.
 * Add: every widget type (built-in and your own) by category. Add as many copies as you like.
-* Settings: language, widget size, grid spacing, font, defaults, autostart, hotkey, grid helper,
+* Settings: language, widget size, monitors, font, defaults, autostart, hotkey, grid helper,
   your own widgets folder and "create a widget".
 Each widget's settings window is built from its widget.json, so third-party widgets get one too.
 Right-clicking a widget runs `deskwidgets configure <id>`, which opens just its settings.
@@ -11,6 +11,7 @@ This is the GTK 4 / libadwaita front end for Linux; `tk_app.py` is the one for W
 import json
 import os
 import sys
+import threading
 import uuid
 from datetime import date
 
@@ -94,6 +95,13 @@ class SettingsWindow(Adw.Window):
             row = Adw.ComboRow(title=tr('Розмір', 'Size'), model=Gtk.StringList.new([size_name(k) for k in keys]))
             row.set_selected(keys.index(inst['size']) if inst['size'] in keys else 0)
             row.connect('notify::selected', lambda r, _p: self.send({'size': keys[r.get_selected()]}))
+            look.add(row)
+        shown = [m for m in common.monitors() if m.get('enabled')]
+        if len(shown) > 1:
+            ids = [m['id'] for m in shown]
+            row = Adw.ComboRow(title=tr('Монітор', 'Monitor'), model=Gtk.StringList.new([m['label'] for m in shown]))
+            row.set_selected(ids.index(inst.get('monitor')) if inst.get('monitor') in ids else 0)
+            row.connect('notify::selected', lambda r, _p: self.send({'monitor': ids[r.get_selected()]}))
             look.add(row)
         style_list = styles()
         style_keys = [k for k, _n in style_list]
@@ -577,6 +585,8 @@ class GalleryWindow(Adw.ApplicationWindow):
     def build_prefs(self):
         s = self.app.settings
         page = Adw.PreferencesPage()
+        if common.service_outdated():
+            page.add(self.build_outdated())
 
         look = Adw.PreferencesGroup(title=tr('Вигляд', 'Appearance'))
         langs = [('auto', tr('Як у системі', 'System')), ('uk', 'Українська'), ('en', 'English')]
@@ -585,10 +595,11 @@ class GalleryWindow(Adw.ApplicationWindow):
         row.connect('notify::selected', lambda r, _p: self.app.change_setting('language', langs[r.get_selected()][0], rebuild=True))
         look.add(row)
 
-        scales = [0.8, 0.9, 1.0, 1.1, 1.25, 1.4, 1.5]
-        row = Adw.ComboRow(title=tr('Розмір віджетів', 'Widget size'), model=Gtk.StringList.new([f'{round(x * 100)} %' for x in scales]))
-        row.set_selected(min(range(len(scales)), key=lambda i: abs(scales[i] - float(s['scale']))))
-        row.connect('notify::selected', lambda r, _p: self.app.change_setting('scale', scales[r.get_selected()]))
+        row = Adw.SpinRow(title=tr('Розмір віджетів, %', 'Widget size, %'),
+                          subtitle=tr('Від 50 до 120. Сітка підлаштовується сама', 'From 50 to 120. The grid adjusts itself'),
+                          adjustment=Gtk.Adjustment(lower=50, upper=120, step_increment=5, page_increment=10))
+        row.set_value(min(max(round(float(s['scale']) * 100), 50), 120))
+        row.connect('notify::value', lambda r, _p: self.app.change_setting('scale', round(r.get_value()) / 100, delay=500))
         look.add(row)
 
         font_row = Adw.ActionRow(title=tr('Шрифт', 'Font'),
@@ -619,18 +630,9 @@ class GalleryWindow(Adw.ApplicationWindow):
         look.add(row)
         page.add(look)
 
-        grid = Adw.PreferencesGroup(title=tr('Сітка', 'Grid'),
-                                    description=tr('Віджети стоять по клітинках; відступи — в пікселях.',
-                                                   'Widgets sit in grid cells; spacing is in pixels.'))
-        for key, title, hi in (('gap', tr('Між віджетами', 'Between widgets'), 64),
-                               ('margin_top', tr('Згори (верхня панель)', 'Top (top bar)'), 400),
-                               ('margin_bottom', tr('Знизу (док)', 'Bottom (dock)'), 400),
-                               ('margin_side', tr('З боків', 'Sides'), 400)):
-            spin = Adw.SpinRow(title=title, adjustment=Gtk.Adjustment(lower=0, upper=hi, step_increment=2, page_increment=10))
-            spin.set_value(float(s[key]))
-            spin.connect('notify::value', lambda r, _p, k=key: self.app.change_setting(k, int(r.get_value()), delay=700))
-            grid.add(spin)
-        page.add(grid)
+        monitors = common.monitors()
+        if len(monitors) > 1:
+            page.add(self.build_monitors(monitors))
 
         system = Adw.PreferencesGroup(title=tr('Система', 'System'))
         row = Adw.SwitchRow(title=tr('Запускати під час входу', 'Start at login'), active=s['autostart'])
@@ -670,6 +672,62 @@ class GalleryWindow(Adw.ApplicationWindow):
 
         self.prefs_scroller = page
         return page
+
+    def build_outdated(self):
+        """The service was started before an upgrade and runs the old code, so it cannot list the monitors (or
+        use whatever else is new). One click restarts it."""
+        group = Adw.PreferencesGroup()
+        row = Adw.ActionRow(title=tr('Сервіс працює зі старою версією', 'The service is running an old version'),
+                            subtitle=tr('Перезапустіть його, щоб з’явилися всі налаштування, зокрема монітори',
+                                        'Restart it to get all settings, monitors included'))
+        button = Gtk.Button(label=tr('Перезапустити', 'Restart'), valign=Gtk.Align.CENTER)
+        button.add_css_class('suggested-action')
+        row.add_suffix(button)
+        group.add(row)
+
+        def finished(ok):
+            if self.app.win is self:
+                self.app.rebuild_window()
+            return False
+
+        def restart(_b):
+            button.set_sensitive(False)
+            button.set_label(tr('Перезапуск…', 'Restarting…'))
+
+            def work():
+                GLib.idle_add(finished, common.restart_service())
+            threading.Thread(target=work, daemon=True).start()
+        button.connect('clicked', restart)
+        return group
+
+    def build_monitors(self, monitors):
+        """One switch per connected monitor: widgets are shown on the ones that are on, each with its own grid."""
+        group = Adw.PreferencesGroup(
+            title=tr('Монітори', 'Monitors'),
+            description=tr('Віджети показуються на вибраних моніторах. Перетягніть віджет на інший монітор '
+                           'або виберіть монітор у його налаштуваннях.',
+                           'Widgets are shown on the monitors that are on. Drag a widget to another monitor '
+                           'or pick one in its settings.'))
+        switches, busy = {}, [False]
+
+        def toggled(row, monitor_id):
+            if busy[0]:
+                return
+            chosen = [m for m, sw in switches.items() if sw.get_active()]
+            if not chosen:   # the last monitor cannot be switched off: the widgets would have nowhere to be
+                busy[0] = True
+                row.set_active(True)
+                busy[0] = False
+                self.toast(tr('Хоча б один монітор має лишитися', 'At least one monitor has to stay on'))
+                return
+            self.app.change_setting('monitors', chosen, delay=400)
+
+        for m in monitors:
+            row = Adw.SwitchRow(title=m['label'], active=bool(m.get('enabled')))
+            switches[m['id']] = row
+            row.connect('notify::active', lambda r, _p, mid=m['id']: toggled(r, mid))
+            group.add(row)
+        return group
 
     def open_folder(self, folder):
         os.makedirs(folder, exist_ok=True)
@@ -779,13 +837,7 @@ class Gallery(Adw.Application):
         if rebuild:   # language: rebuild the UI in the new language
             set_lang(settings_mod.language(self.settings))
             self.call('settings')
-            if self.win:
-                old = self.win
-                old._close_gallery()
-                self.win = GalleryWindow(self, page='prefs')
-                self.win.connect('close-request', lambda *a: setattr(self, 'win', None) or False)
-                self.win.present()
-                old.destroy()
+            self.rebuild_window()
             self.render_thumbnails()
             return
         if not apply:
@@ -793,6 +845,16 @@ class Gallery(Adw.Application):
         if self.setting_timer:
             GLib.source_remove(self.setting_timer)
         self.setting_timer = GLib.timeout_add(delay or 50, lambda: (self.call('settings'), setattr(self, 'setting_timer', 0), False)[2])
+
+    def rebuild_window(self):
+        """The gallery window again, on the Settings page (a new language, a restarted service)."""
+        if self.win:
+            old = self.win
+            old._close_gallery()
+            self.win = GalleryWindow(self, page='prefs')
+            self.win.connect('close-request', lambda *a: setattr(self, 'win', None) or False)
+            self.win.present()
+            old.destroy()
 
     def render_thumbnails(self, only=None):
         """Thumbnails come from a child process (see gallery/common.py); reload them when it is done."""

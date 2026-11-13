@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from .. import VERSION
-from ..core import catalog, paths, settings as settings_mod
+from ..core import catalog, monitors as monitors_mod, paths, settings as settings_mod
 from ..core.grid import Grid
 from ..core.i18n import set_lang, tr
 from ..core.layout import Layout
@@ -27,6 +27,18 @@ from .instance import WidgetInstance
 from .overlay import GridOverlay
 
 GALLERY_HOTKEY = {'win32': 'ctrl+alt+w'}
+GALLERY_LOG_LIMIT = 200_000   # bytes; the log starts over when it grows past this
+
+
+class Screen:
+    """A monitor that carries widgets, with its grid."""
+
+    def __init__(self, monitor, grid):
+        self.monitor, self.grid = monitor, grid
+
+    @property
+    def origin(self):
+        return self.monitor.x, self.monitor.y
 
 
 class Daemon:
@@ -40,8 +52,7 @@ class Daemon:
         self.hub = ServiceHub()
         self.types = {}
         self.layout = None
-        self.grid = None
-        self.origin = (0, 0)
+        self.screens = {}           # monitor id -> Screen, the monitors that carry widgets; the first is the home one
         self.instances = {}
         self.overlay = GridOverlay(self)
         self.server = None
@@ -85,15 +96,16 @@ class Daemon:
         self.server.start()
         self.backend.on_screen_changed = self.screen_changed
         self.types = catalog.discover()
-        self.rebuild_grid()
-        self.layout = Layout(self.grid, self.types, self.settings)
+        self.rebuild_screens()
+        self.layout = Layout(self.grids, self.types, self.settings)
         self.layout.load()
         self.layout.save()
         self.sync_services()
         for inst in self.layout.instances:
             self.start_instance(inst['id'])
         self.setup_desktop_integration()
-        log(f'DeskWidgets {VERSION}: {len(self.instances)} widgets on a {self.grid.cols}×{self.grid.rows} grid')
+        log(f'DeskWidgets {VERSION}: {len(self.instances)} widgets on ' + ', '.join(
+            f'{m} {s.grid.cols}×{s.grid.rows}' for m, s in self.screens.items()))
 
     def shutdown(self):
         for instance in list(self.instances.values()):
@@ -113,22 +125,43 @@ class Daemon:
         self.lang = settings_mod.language(self.settings)
         set_lang(self.lang)
 
-    def rebuild_grid(self):
-        """The grid for this screen: the work area minus the margins from the settings, at the screen's DPI."""
-        x, y, width, height = self.backend.work_area()
-        dpi, s = self.backend.dpi_scale(), self.settings
-        self.origin = (x, y)
-        self.grid = Grid(width, height, {
-            **s, 'scale': s['scale'] * dpi, 'gap': round(s['gap'] * dpi), 'margin_side': round(s['margin_side'] * dpi),
-            'margin_top': round(s['margin_top'] * dpi), 'margin_bottom': round(s['margin_bottom'] * dpi)})
+    def rebuild_screens(self):
+        """One grid per monitor that shows widgets: its area minus the margins from the settings, at its DPI."""
+        s = self.settings
+        self.screens = {}
+        for m in monitors_mod.select(self.backend.monitors(), s['monitors']):
+            self.screens[m.id] = Screen(m, Grid(m.width, m.height, {
+                **s, 'scale': s['scale'] * m.scale, 'gap': round(s['gap'] * m.scale),
+                'margin_side': round(s['margin_side'] * m.scale), 'margin_top': round(s['margin_top'] * m.scale),
+                'margin_bottom': round(s['margin_bottom'] * m.scale)}))
 
-    def window_xy(self, col, row):
-        gx, gy = self.grid.window_xy(col, row)
-        return gx + self.origin[0], gy + self.origin[1]
+    @property
+    def grids(self):
+        return {m: s.grid for m, s in self.screens.items()}
+
+    @property
+    def grid(self):
+        """The grid of the first monitor."""
+        return next(iter(self.screens.values())).grid
+
+    def screen_of(self, monitor):
+        return self.screens.get(monitor) or next(iter(self.screens.values()))
+
+    def window_xy(self, col, row, monitor=None):
+        """Where the window of a widget on cell (col, row) of `monitor` goes on the screen."""
+        screen = self.screen_of(monitor)
+        gx, gy = screen.grid.window_xy(col, row)
+        return gx + screen.origin[0], gy + screen.origin[1]
 
     def nearest_cell(self, instance, pos):
+        """(monitor, col, row) for a widget window at `pos`: the monitor under the middle of the window, and the
+        free-or-not cell nearest to its corner there."""
+        width, height = instance.size_px
+        screen = self.screens[monitors_mod.at_point([s.monitor for s in self.screens.values()],
+                                                    pos[0] + width / 2, pos[1] + height / 2).id]
         x, y = instance.window_origin(pos)
-        return self.grid.nearest_cell(x - self.origin[0], y - self.origin[1], instance.inst['size'])
+        col, row = screen.grid.nearest_cell(x - screen.origin[0], y - screen.origin[1], instance.inst['size'])
+        return screen.monitor.id, col, row
 
     def screen_changed(self):
         """A monitor was plugged in or the resolution changed: lay the widgets out again (debounced)."""
@@ -138,8 +171,8 @@ class Daemon:
 
     def apply_screen(self):
         self._screen_timer = None
-        self.rebuild_grid()
-        self.layout.regrid(self.grid)
+        self.rebuild_screens()
+        self.layout.regrid(self.grids)
         self.layout.save()
         self.restart_all()
 
@@ -179,25 +212,41 @@ class Daemon:
         self.overlay.update(instance, pos)
 
     def drop(self, instance, pos):
-        """The widget was let go at window position `pos`: snap it to the nearest free cell."""
+        """The widget was let go at window position `pos`: snap it to the nearest free cell, on whichever
+        monitor it was dropped."""
         self.overlay.hide()
         inst = instance.inst
         if inst is None:
             return
-        col, row = self.nearest_cell(instance, pos)
-        spot = self.layout.move(inst['id'], col, row) or (inst['col'], inst['row'])
-        instance.place(*spot)
+        monitor, col, row = self.nearest_cell(instance, pos)
+        self.layout.move(inst['id'], col, row, monitor=monitor)
+        instance.relocate()
         self.layout.save()
 
     # desktop
     def open_gallery(self, configure=None):
-        command = [sys.executable, '-m', 'deskwidgets', 'gallery'] + (['--configure', configure] if configure else [])
+        """Opens the gallery, or the settings of one widget (`configure` = its id), in a window of its own.
+        The window's errors go to gallery.log next to service.log: nobody sees a process started from here."""
+        command = [sys.executable, '-m', 'deskwidgets'] + (['configure', configure] if configure else ['gallery'])
+        errors = self._gallery_log()
         try:
-            subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
                              start_new_session=sys.platform != 'win32',
                              creationflags=0x08000000 if sys.platform == 'win32' else 0)
         except OSError as e:
             log(f'cannot open the gallery: {e}')
+        finally:
+            if errors is not subprocess.DEVNULL:
+                errors.close()
+
+    @staticmethod
+    def _gallery_log():
+        path = paths.CACHE / 'gallery.log'
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            return open(path, 'w' if path.exists() and path.stat().st_size > GALLERY_LOG_LIMIT else 'a', encoding='utf-8')
+        except OSError:
+            return subprocess.DEVNULL
 
     def notify(self, title, body):
         if self.tray:
@@ -235,7 +284,7 @@ class Daemon:
     def cmd_list(self):
         return self.layout.instances
 
-    def cmd_add(self, type):
+    def cmd_add(self, type, monitor=None):
         if type not in self.types:
             self.types = catalog.discover()
             self.layout.reload_types(self.types)
@@ -244,13 +293,13 @@ class Daemon:
             raise ValueError(tr(f'Немає такого віджета: {type}', f'No such widget: {type}'))
         if not t.supported:
             raise ValueError(tr(f'«{t.title}» не працює в цій системі', f'"{t.title}" does not work on this system'))
-        inst = self.layout.add(type)
+        inst = self.layout.add(type, monitor=monitor)
         if inst is None:
             raise ValueError(tr('На сітці немає місця', 'The grid is full'))
         self.layout.save()
         self.start_instance(inst['id'])
         self.sync_services()
-        log(f"{inst['id']}: added at ({inst['col']}, {inst['row']})")
+        log(f"{inst['id']}: added at ({inst['col']}, {inst['row']}) on {inst['monitor']}")
         return inst['id']
 
     def cmd_remove(self, id):
@@ -272,15 +321,15 @@ class Daemon:
         else:
             self.start_instance(id)
 
-    def cmd_move(self, id, col, row):
+    def cmd_move(self, id, col, row, monitor=None):
         instance = self.instances.get(id)
         if self.layout.get(id) is None:
             raise KeyError(id)
-        spot = self.layout.move(id, int(col), int(row))
+        spot = self.layout.move(id, int(col), int(row), monitor=monitor)
         if spot is None:
             raise ValueError(tr('Тут немає місця', 'No room there'))
         if instance:
-            instance.place(*spot)
+            instance.relocate()
         self.layout.save()
         return list(spot)
 
@@ -310,12 +359,19 @@ class Daemon:
             self.restart_requested = True
             self.backend.quit()
             return
-        self.rebuild_grid()
+        self.rebuild_screens()
         self.layout.settings = self.settings
-        self.layout.regrid(self.grid)
+        self.layout.regrid(self.grids)
         self.layout.save()
         self.restart_all()
         log('settings applied')
+
+    def cmd_monitors(self):
+        """Every connected monitor, for the settings in the gallery: id, label, size, whether it is the primary
+        one and whether widgets are shown on it."""
+        return [{'id': m.id, 'label': monitors_mod.label(m), 'width': m.width, 'height': m.height,
+                 'primary': m.primary, 'enabled': m.id in self.screens}
+                for m in monitors_mod.ordered(self.backend.monitors())]
 
     def cmd_gallery(self, configure=None):
         self.open_gallery(configure)

@@ -17,8 +17,11 @@ widget is a folder with two files.
   devices and Pulsar/Kysona-style 2.4 GHz gaming mice), Docker, note, countdown, picture, hryvnia exchange rates, and **anime**: next episodes from
   AniList, manga clock, anime buddy.
 * **Grid**: drag a widget with the mouse — the grid appears and the widget snaps into the nearest free cell.
-* **Three sizes** for every widget: small (1×1 cell), medium (2×1), large (2×2), plus a global
-  widget size from 80 % to 150 %.
+* **One size setting**: Settings → Widget size, from 50 % to 120 %. The grid follows by itself: smaller widgets
+  mean smaller cells and more of them, and every widget stays where it was on the screen.
+* **Several monitors**: tick the monitors that show widgets (Settings → Monitors). Each has its own grid
+  (on Windows its own DPI scale too); drag a widget onto another monitor, or pick one in its settings.
+* **Three sizes** for every widget: small (1×1 cell), medium (2×1), large (2×2).
 * **Nine styles** — Glass, Graphite, Light, Colour, Sakura, Manga, Neon, and borderless (dark or light
   text) — and **13 accent colours** that tint the card and the highlights.
 * **Settings for each widget** (city, cities, currencies, text, dates, pictures…) with a live preview.
