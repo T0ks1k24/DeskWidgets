@@ -343,6 +343,65 @@ class FakeWindowsTests(unittest.TestCase):
             self.api.state.dpi = dpi
             self.assertEqual(self.backend.dpi_scale(), scale)
 
+    def fake_monitors(self, *monitors):
+        """monitors: (handle, device, (left, top, right, bottom) of the work area, primary, dpi)."""
+        by_handle = {m[0]: m for m in monitors}
+
+        def enum(hdc, clip, callback, lparam):
+            for handle in by_handle:
+                callback(handle, None, None, 0)
+            return 1
+
+        def info(handle, ref):
+            _handle, device, work, primary, _dpi = by_handle[handle]
+            ref._obj.rcWork.left, ref._obj.rcWork.top, ref._obj.rcWork.right, ref._obj.rcWork.bottom = work
+            ref._obj.dwFlags = w.MONITORINFOF_PRIMARY if primary else 0
+            ref._obj.szDevice = device
+            return 1
+
+        def dpi(handle, kind, x_ref, y_ref):
+            x_ref._obj.value = y_ref._obj.value = by_handle[handle][4] if handle in by_handle else 96   # 96: the primary
+            return 0
+
+        self.user32.EnumDisplayMonitors.side_effect = enum
+        self.user32.GetMonitorInfoW.side_effect = info
+        self.api.shcore.GetDpiForMonitor = MagicMock(side_effect=dpi)
+
+    def test_every_monitor_is_listed_with_its_work_area_and_dpi_primary_first(self):
+        self.fake_monitors((11, r'\\.\DISPLAY2', (1920, 0, 3200, 720), False, 192),
+                           (10, r'\\.\DISPLAY1', (0, 0, 1920, 1040), True, 96),
+                           (12, r'\\.\DISPLAY3', (-1280, 0, 0, 1024), False, 120))
+        found = self.backend.monitors()
+        self.assertEqual([(m.id, m.primary, m.rect, m.scale) for m in found], [
+            (r'\\.\DISPLAY1', True, (0, 0, 1920, 1040), 1.0),
+            (r'\\.\DISPLAY3', False, (-1280, 0, 1280, 1024), 1.25),
+            (r'\\.\DISPLAY2', False, (1920, 0, 1280, 720), 2.0)])
+
+    def test_without_an_enumeration_the_primary_work_area_is_the_one_monitor(self):
+        self.api.state.screen = (0, 0, 1600, 900)
+        found = self.backend.monitors()
+        self.assertEqual([(m.id, m.primary, m.rect) for m in found], [('screen', True, (0, 0, 1600, 900))])
+
+    def test_a_monitor_that_cannot_be_queried_is_skipped(self):
+        self.fake_monitors((10, r'\\.\DISPLAY1', (0, 0, 1920, 1040), True, 96))
+        self.user32.GetMonitorInfoW.side_effect = lambda handle, ref: 0
+        self.assertEqual([m.id for m in self.backend.monitors()], ['screen'])
+
+    def test_plugging_a_monitor_in_is_reported(self):
+        calls = []
+        self.backend.on_screen_changed = lambda: calls.append(1)
+        self.fake_monitors((10, r'\\.\DISPLAY1', (0, 0, 1920, 1040), True, 96))
+        self.backend._screen = self.backend._screen_state()
+        with patch.object(w, 'SCREEN_DEBOUNCE', 0):
+            self.backend._dispatch(self.backend.control, w.WM_SETTINGCHANGE, 0, 0)
+            self.backend.timers.run_due()
+            self.assertEqual(calls, [])
+            self.fake_monitors((10, r'\\.\DISPLAY1', (0, 0, 1920, 1040), True, 96),
+                               (11, r'\\.\DISPLAY2', (1920, 0, 3200, 720), False, 96))
+            self.backend._dispatch(self.backend.control, w.WM_DISPLAYCHANGE, 32, 0)
+            self.backend.timers.run_due()
+        self.assertEqual(calls, [1])
+
     def test_scale_falls_back_to_system_dpi_then_device_caps(self):
         self.api.shcore.GetDpiForMonitor = None
         self.user32.GetDpiForSystem = MagicMock(return_value=144)

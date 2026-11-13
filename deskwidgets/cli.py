@@ -1,7 +1,9 @@
 """Command line: `deskwidgets [command]` (no command = run the service)."""
 import argparse
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
 from . import VERSION
@@ -44,18 +46,44 @@ def _layout():
 
 
 def cmd_run(_a):
+    if sys.platform != 'win32' and settings_mod.load()['hotkey']:
+        try:
+            from .platform import integration
+            if integration.refresh_hotkey():
+                print('deskwidgets: the gallery shortcut pointed somewhere else; it is fixed', file=sys.stderr)
+        except Exception as e:   # never stop the widgets for the sake of a shortcut
+            print(f'deskwidgets: cannot check the gallery shortcut: {e}', file=sys.stderr)
     from .service.daemon import run
     return run()
 
 
+def _errors_to_file(name):
+    """A window started from a shortcut, the tray or the service has no console, so its errors would vanish
+    (under pythonw there is not even a sys.stderr). Keep them in a file next to service.log."""
+    if sys.stderr is not None and sys.stderr.isatty():
+        return False
+    try:
+        paths.CACHE.mkdir(parents=True, exist_ok=True)
+        sys.stderr = open(paths.CACHE / name, 'a', encoding='utf-8', buffering=1)
+    except OSError:
+        return False
+    return True
+
+
 def cmd_gallery(a):
+    if _errors_to_file('gallery.log'):
+        # a trace of every start from a shortcut: if the file has no line after a key press, the key never got here
+        print(f'{time.strftime("%Y-%m-%d %H:%M:%S")} gallery started {sys.argv[1:] or ""} '
+              f'(session {os.environ.get("XDG_SESSION_TYPE", "?")}, display {os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY") or "none"})',
+              file=sys.stderr, flush=True)
     try:
         from .gallery import main as gallery_main
     except (ImportError, ValueError) as e:
-        print(tr('Для галереї потрібні PyGObject, GTK 4 і libadwaita (', 'The gallery needs PyGObject, GTK 4 and libadwaita (')
+        print(tr('Для галереї потрібні PyGObject, GTK 4 і libadwaita або Tk (', 'The gallery needs PyGObject, GTK 4 and libadwaita, or Tk (')
               + f'{e}); deskwidgets doctor', file=sys.stderr)
         return 1
-    return gallery_main(['--configure', a.id] if getattr(a, 'id', None) else [])
+    widget = getattr(a, 'id', None) or getattr(a, 'configure', None)
+    return gallery_main(['--configure', widget] if widget else [])
 
 
 def cmd_add(a):
@@ -186,7 +214,9 @@ def build_parser():
     p.add_argument('--version', action='version', version=f'deskwidgets {VERSION}')
     sub = p.add_subparsers(dest='command')
     sub.add_parser('run', help=tr('запустити сервіс (за замовчуванням)', 'run the service (default)')).set_defaults(func=cmd_run)
-    sub.add_parser('gallery', help=tr('відкрити галерею', 'open the gallery')).set_defaults(func=cmd_gallery)
+    c = sub.add_parser('gallery', help=tr('відкрити галерею', 'open the gallery'))
+    c.add_argument('--configure', metavar='ID', help=tr('одразу відкрити налаштування цього віджета', 'open the settings of this widget'))
+    c.set_defaults(func=cmd_gallery)
     c = sub.add_parser('configure', help=tr('налаштування віджета', 'settings of a widget'))
     c.add_argument('id'); c.set_defaults(func=cmd_gallery)
     c = sub.add_parser('add', help=tr('додати віджет на стіл', 'add a widget to the desktop'))

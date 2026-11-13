@@ -77,10 +77,32 @@ def run_checks():
         for m in hid_mice.find():
             row(tr('заряд миші ', 'mouse battery ') + m['name'], m['access'],
                 tr('потрібне правило udev, виконайте: ', 'needs the udev rule, run: ') + cli.udev_command())
+    hotkey_row(row)
     from ..service import ipc
     row(tr('сервіс працює', 'service running'), ipc.is_running(), f'({tr("запустіть", "start it")}: deskwidgets)')
     print(f'{tr("Віджети", "Widgets")}: {paths.BUILTIN_WIDGETS}  ·  {tr("мої", "mine")}: {paths.USER_WIDGETS}')
     return 0 if ok else 1
+
+
+def hotkey_row(row):
+    """The gallery hotkey: Windows registers it in the service, GNOME keeps it as a custom shortcut."""
+    if WINDOWS:
+        row(tr('гаряча клавіша Ctrl+Alt+W', 'hotkey Ctrl+Alt+W'), settings_mod.load()['hotkey'],
+            tr('вимкнена в налаштуваннях', 'switched off in the settings'))
+        return
+    from ..platform import integration
+    state = integration.hotkey_state()
+    if state is None:
+        row(tr('гаряча клавіша', 'hotkey'), False, f'({tr("не GNOME: прив’яжіть до клавіші команду", "not GNOME: bind this command to a key")}: '
+                                                  f'deskwidgets gallery)')
+        return
+    name = tr('гаряча клавіша ', 'hotkey ') + (state['binding'] or integration.HOTKEY)
+    if not state['registered']:
+        row(name, False, tr('не створена: deskwidgets setup', 'not created: deskwidgets setup'))
+    elif state['command'] != state['wanted']:
+        row(name, False, tr('вказує на інший запуск; перезапустіть сервіс, щоб виправити', 'points at another install; restart the service to fix it'))
+    else:
+        row(name, True)
 
 
 def _can_load(name):

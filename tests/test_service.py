@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from deskwidgets.core import paths
+from deskwidgets.core.monitors import Monitor
 from deskwidgets.platform.null import NullBackend
 from deskwidgets.service import instance as instance_mod, ipc
 from deskwidgets.service.daemon import Daemon
@@ -31,13 +32,18 @@ class FakeHub:
 
 
 class DaemonCase(IsolatedTestCase):
+    settings = None   # settings.json before the service starts
+    monitors = None   # the monitors the null backend reports (one 1920x1080 screen by default)
+
     def setUp(self):
         super().setUp()
         for target in ('deskwidgets.service.daemon.legacy.stop_old_versions',):   # never kill the developer's real widgets
             patcher = patch(target)
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.backend = NullBackend()
+        if self.settings:
+            paths.SETTINGS.write_text(json.dumps(self.settings))
+        self.backend = NullBackend(monitors=self.monitors)
         self.daemon = Daemon(self.backend)
         self.daemon.hub = FakeHub()
         self.daemon.open_gallery = Mock()
@@ -141,9 +147,9 @@ class CommandTests(DaemonCase):
         self.assertEqual(len(self.widgets_on_screen()), len(old))
 
     def test_settings_change_applies_the_grid_and_font_change_asks_for_a_restart(self):
-        paths.SETTINGS.write_text(json.dumps({'scale': 1.5, 'gap': 10}))
+        paths.SETTINGS.write_text(json.dumps({'scale': 1.1, 'gap': 10}))
         self.daemon.handle('settings', {})
-        self.assertEqual(self.daemon.grid.scale, 1.5)
+        self.assertEqual(self.daemon.grid.scale, 1.1)
         self.assertFalse(self.daemon.restart_requested)
         paths.SETTINGS.write_text(json.dumps({'font': 'DejaVu Sans'}))
         self.daemon.handle('settings', {})
@@ -258,6 +264,264 @@ class MouseTests(DaemonCase):
         self.window.release(80, 80)
 
 
+class GalleryLaunchTests(DaemonCase):
+    """Right click and the hotkey start `python -m deskwidgets ...`: that command must be one the CLI accepts
+    (the other tests replace open_gallery with a mock, so they cannot see a mismatch)."""
+
+    def launched(self, **args):
+        with patch('deskwidgets.service.daemon.subprocess.Popen') as popen:
+            Daemon.open_gallery(self.daemon, **args)
+        command = popen.call_args[0][0]
+        self.assertEqual(command[:3], [sys.executable, '-m', 'deskwidgets'])
+        return command[3:], popen.call_args[1]
+
+    def test_the_gallery_command_is_understood_by_the_cli(self):
+        from deskwidgets import cli
+        argv, _ = self.launched()
+        parsed = cli.build_parser().parse_args(argv)
+        self.assertIs(parsed.func, cli.cmd_gallery)
+        self.assertFalse(getattr(parsed, 'configure', None) or getattr(parsed, 'id', None))
+
+    def test_the_settings_command_is_understood_by_the_cli(self):
+        from deskwidgets import cli
+        argv, _ = self.launched(configure='clock')
+        parsed = cli.build_parser().parse_args(argv)
+        self.assertIs(parsed.func, cli.cmd_gallery)
+        self.assertEqual(parsed.id, 'clock')
+
+    def test_the_old_spelling_still_works(self):
+        from deskwidgets import cli
+        parsed = cli.build_parser().parse_args(['gallery', '--configure', 'clock'])
+        self.assertIs(parsed.func, cli.cmd_gallery)
+        self.assertEqual(parsed.configure, 'clock')
+
+    def test_errors_of_the_window_are_kept_in_a_file(self):
+        _argv, options = self.launched(configure='clock')
+        self.assertNotEqual(options['stderr'], __import__('subprocess').DEVNULL)
+        self.assertTrue((paths.CACHE / 'gallery.log').exists())
+
+    def test_a_huge_log_starts_over(self):
+        log = paths.CACHE / 'gallery.log'
+        log.write_text('x' * 300_000)
+        self.launched()
+        self.assertLess(log.stat().st_size, 1000)
+
+
+class WidgetSizeTests(DaemonCase):
+    """The widget size (50-120 %) is the only knob: the grid follows it."""
+
+    def set_scale(self, scale):
+        paths.SETTINGS.write_text(json.dumps({**self.daemon.settings, 'scale': scale}))
+        self.daemon.handle('settings', {})
+
+    def sizes(self):
+        return {i['id']: (self.window_of(i['id']).width, self.window_of(i['id']).height) for i in self.runnable_instances()}
+
+    def test_smaller_widgets_make_a_finer_grid(self):
+        cells = (self.daemon.grid.rows, self.daemon.grid.cols)
+        big = self.sizes()
+        self.set_scale(0.5)
+        self.assertGreater(self.daemon.grid.cols, cells[1] * 1.5)
+        self.assertGreater(self.daemon.grid.rows, cells[0] * 1.5)
+        for inst_id, (width, height) in self.sizes().items():
+            self.assertLess(width, big[inst_id][0] * 0.6)
+            self.assertLess(height, big[inst_id][1] * 0.6)
+
+    def test_bigger_widgets_make_a_coarser_grid(self):
+        cols = self.daemon.grid.cols
+        self.set_scale(1.2)
+        self.assertLess(self.daemon.grid.cols, cols)
+
+    def test_widgets_stay_where_they_were_and_never_overlap_or_leave_the_grid(self):
+        for scale in (0.5, 0.8, 1.2, 1.0):
+            self.set_scale(scale)
+            grid, cells = self.daemon.grid, []
+            for inst in self.daemon.layout.instances:
+                self.assertTrue(grid.fits(inst['col'], inst['row'], inst['size']), (scale, inst['id']))
+                cells += list(grid.cells(inst['col'], inst['row'], inst['size']))
+            self.assertEqual(len(cells), len(set(cells)), f'overlap at {scale}')
+
+    def test_the_right_hand_column_stays_at_the_right_edge(self):
+        right = [i['id'] for i in self.daemon.layout.instances if i['col'] + 2 >= self.daemon.grid.cols]
+        self.assertTrue(right)
+        for scale in (0.5, 1.2):
+            self.set_scale(scale)
+            for inst_id in right:
+                inst = self.daemon.layout.get(inst_id)
+                self.assertEqual(inst['col'] + 2, self.daemon.grid.cols, (scale, inst_id))
+
+    def test_the_top_left_widget_stays_in_the_corner(self):
+        self.set_scale(0.5)
+        inst = self.daemon.layout.get('clock')
+        self.assertEqual((inst['col'], inst['row']), (0, 0))
+        self.assertEqual(self.daemon.window_xy(0, 0), (self.window_of('clock').x, self.window_of('clock').y))
+
+    def test_the_layout_file_follows(self):
+        self.set_scale(0.5)
+        saved = {i['id']: (i['col'], i['row']) for i in json.loads(paths.LAYOUT.read_text())['instances']}
+        self.assertEqual(saved, {i['id']: (i['col'], i['row']) for i in self.daemon.layout.instances})
+
+
+def two_monitors(second_scale=1.0):
+    return [Monitor('DP-1', 0, 0, 1920, 1080, True, 1.0), Monitor('HDMI-1', 1920, 0, 1280, 720, False, second_scale)]
+
+
+class MonitorTests(DaemonCase):
+    monitors = two_monitors()
+
+    def enable(self, *ids):
+        paths.SETTINGS.write_text(json.dumps({**self.daemon.settings, 'monitors': list(ids)}))
+        self.daemon.handle('settings', {})
+
+    def on_monitor(self, monitor):
+        return [i['id'] for i in self.daemon.layout.instances if i['monitor'] == monitor]
+
+    def test_by_default_only_the_primary_monitor_shows_widgets(self):
+        self.assertEqual(list(self.daemon.screens), ['DP-1'])
+        self.assertTrue(all(w.x < 1920 for w in self.widgets_on_screen()))
+        self.assertTrue(all(i['monitor'] == 'DP-1' for i in self.daemon.layout.instances))
+
+    def test_the_gallery_can_list_the_monitors(self):
+        listed = self.daemon.handle('monitors', {})
+        self.assertEqual([(m['id'], m['primary'], m['enabled']) for m in listed], [('DP-1', True, True), ('HDMI-1', False, False)])
+        self.assertIn('1920×1080', listed[0]['label'])
+        self.enable('DP-1', 'HDMI-1')
+        self.assertEqual([m['enabled'] for m in self.daemon.handle('monitors', {})], [True, True])
+
+    def test_each_enabled_monitor_has_its_own_grid(self):
+        self.enable('DP-1', 'HDMI-1')
+        grids = {m: s.grid for m, s in self.daemon.screens.items()}
+        self.assertEqual(list(grids), ['DP-1', 'HDMI-1'])
+        self.assertGreater(grids['DP-1'].cols, grids['HDMI-1'].cols)
+        self.assertEqual(self.daemon.window_xy(0, 0, 'HDMI-1')[0], 1920 + grids['HDMI-1'].window_xy(0, 0)[0])
+
+    def test_a_widget_can_be_added_to_a_chosen_monitor(self):
+        self.enable('DP-1', 'HDMI-1')
+        inst_id = self.daemon.handle('add', {'type': 'clock', 'monitor': 'HDMI-1'})
+        self.assertEqual(self.daemon.layout.get(inst_id)['monitor'], 'HDMI-1')
+        self.assertGreaterEqual(self.window_of(inst_id).x, 1920)
+        other = self.daemon.handle('add', {'type': 'clock'})
+        self.assertEqual(self.daemon.layout.get(other)['monitor'], 'DP-1')
+
+    def test_a_full_first_monitor_overflows_to_the_next(self):
+        self.enable('DP-1', 'HDMI-1')
+        for _ in range(50):
+            self.daemon.handle('add', {'type': 'clock'})
+        self.assertTrue(self.on_monitor('HDMI-1'))
+        with self.assertRaisesRegex(ValueError, 'full|місця'):
+            while True:   # and when both are full that is reported too
+                self.daemon.handle('add', {'type': 'clock'})
+
+    def test_dragging_a_widget_onto_the_other_monitor_moves_it_there(self):
+        self.enable('DP-1', 'HDMI-1')
+        window = self.window_of('clock')
+        window.press(5, 5)
+        window.motion(1920 + 400 - window.x, 300)   # the middle of the window is now on HDMI-1
+        grids = [w for w in self.backend.windows if w.click_through and not w.closed]
+        self.assertEqual(len(grids), 1)
+        self.assertGreaterEqual(grids[0].x, 1920 - 1, 'the grid shows on the monitor the widget is over')
+        window.release(1920 + 400 - window.x, 300)
+        inst = self.daemon.layout.get('clock')
+        self.assertEqual(inst['monitor'], 'HDMI-1')
+        self.assertTrue(self.daemon.screens['HDMI-1'].grid.fits(inst['col'], inst['row'], inst['size']))
+        moved = self.window_of('clock')
+        self.assertEqual((moved.x, moved.y), self.daemon.window_xy(inst['col'], inst['row'], 'HDMI-1'))
+        self.assertEqual(json.loads(paths.LAYOUT.read_text())['instances'][[i['id'] for i in self.daemon.layout.instances].index('clock')]['monitor'], 'HDMI-1')
+
+    def test_the_grid_follows_the_widget_between_monitors_while_dragging(self):
+        self.enable('DP-1', 'HDMI-1')
+        window = self.window_of('clock')
+        window.press(5, 5)
+        window.motion(1920 + 400 - window.x, 300)
+        self.assertGreaterEqual([w for w in self.backend.windows if w.click_through and not w.closed][0].x, 1919)
+        window.motion(300 - window.x, 300)
+        shown = [w for w in self.backend.windows if w.click_through and not w.closed]
+        self.assertEqual(len(shown), 1)
+        self.assertLess(shown[0].x, 1920)
+        window.release(300 - window.x, 300)
+
+    def test_a_widget_picks_its_monitor_in_its_settings(self):
+        self.enable('DP-1', 'HDMI-1')
+        self.daemon.handle('configure', {'id': 'clock', 'patch': {'monitor': 'HDMI-1'}})
+        self.assertEqual(self.daemon.layout.get('clock')['monitor'], 'HDMI-1')
+        self.assertGreaterEqual(self.window_of('clock').x, 1920)
+        self.daemon.handle('configure', {'id': 'clock', 'patch': {'monitor': 'nonsense'}})
+        self.assertEqual(self.daemon.layout.get('clock')['monitor'], 'HDMI-1')
+
+    def test_switching_a_monitor_off_brings_its_widgets_to_the_first_one(self):
+        self.enable('DP-1', 'HDMI-1')
+        self.daemon.handle('configure', {'id': 'clock', 'patch': {'monitor': 'HDMI-1'}})
+        self.enable('DP-1')
+        self.assertEqual(list(self.daemon.screens), ['DP-1'])
+        self.assertEqual(self.daemon.layout.get('clock')['monitor'], 'DP-1')
+        cells = [c for i in self.daemon.layout.instances for c in self.daemon.grid.cells(i['col'], i['row'], i['size'])]
+        self.assertEqual(len(cells), len(set(cells)))
+        self.assertTrue(all(w.x < 1920 for w in self.widgets_on_screen()))
+        self.enable('DP-1', 'HDMI-1')   # coming back does not pull them back by itself
+        self.assertEqual(self.daemon.layout.get('clock')['monitor'], 'DP-1')
+
+    def test_only_the_second_monitor_can_carry_the_widgets(self):
+        self.enable('HDMI-1')
+        self.assertEqual(list(self.daemon.screens), ['HDMI-1'])
+        self.assertTrue(all(i['monitor'] == 'HDMI-1' for i in self.daemon.layout.instances))
+        self.assertTrue(all(w.x >= 1920 for w in self.widgets_on_screen()))
+
+    def test_a_monitor_that_is_not_connected_falls_back_to_the_primary_one(self):
+        self.enable('DP-9')
+        self.assertEqual(list(self.daemon.screens), ['DP-1'])
+
+    def test_unplugging_a_monitor_moves_its_widgets_and_plugging_it_back_does_not_lose_the_setting(self):
+        self.enable('DP-1', 'HDMI-1')
+        self.daemon.handle('configure', {'id': 'clock', 'patch': {'monitor': 'HDMI-1'}})
+        self.backend.monitor_list = two_monitors()[:1]
+        self.backend.on_screen_changed()
+        time.sleep(0.9)
+        self.backend.flush()
+        self.assertEqual(list(self.daemon.screens), ['DP-1'])
+        self.assertEqual(self.daemon.layout.get('clock')['monitor'], 'DP-1')
+        self.assertEqual(self.daemon.settings['monitors'], ['DP-1', 'HDMI-1'], 'the choice is kept for when it returns')
+        self.backend.monitor_list = two_monitors()
+        self.backend.on_screen_changed()
+        time.sleep(0.9)
+        self.backend.flush()
+        self.assertEqual(list(self.daemon.screens), ['DP-1', 'HDMI-1'])
+
+    def test_arrange_packs_each_monitor_separately(self):
+        self.enable('DP-1', 'HDMI-1')
+        self.daemon.handle('configure', {'id': 'clock', 'patch': {'monitor': 'HDMI-1'}})
+        self.daemon.handle('arrange', {})
+        self.assertEqual(self.daemon.layout.get('clock')['monitor'], 'HDMI-1')
+        self.assertEqual(len(self.widgets_on_screen()), len(self.runnable_instances()))
+
+    def test_move_command_can_target_a_monitor(self):
+        self.enable('DP-1', 'HDMI-1')
+        spot = self.daemon.handle('move', {'id': 'clock', 'col': 2, 'row': 1, 'monitor': 'HDMI-1'})
+        inst = self.daemon.layout.get('clock')
+        self.assertEqual((inst['monitor'], [inst['col'], inst['row']]), ('HDMI-1', spot))
+        self.assertEqual((self.window_of('clock').x, self.window_of('clock').y), self.daemon.window_xy(*spot, 'HDMI-1'))
+
+
+class MixedDpiTests(DaemonCase):
+    monitors = two_monitors(second_scale=2.0)
+    settings = {'monitors': ['DP-1', 'HDMI-1']}
+
+    def test_a_widget_is_drawn_for_the_dpi_of_its_monitor(self):
+        small = (self.window_of('clock').width, self.window_of('clock').height)
+        self.daemon.handle('configure', {'id': 'clock', 'patch': {'monitor': 'HDMI-1'}})
+        big = (self.window_of('clock').width, self.window_of('clock').height)
+        self.assertGreater(big[0], small[0] * 1.9)
+
+    def test_dropping_on_a_monitor_with_another_dpi_restarts_the_widget_at_its_size(self):
+        window = self.window_of('clock')
+        before = window.width
+        window.press(5, 5)
+        window.motion(1920 + 300 - window.x, 200)
+        window.release(1920 + 300 - window.x, 200)
+        self.assertEqual(self.daemon.layout.get('clock')['monitor'], 'HDMI-1')
+        self.assertTrue(window.closed)
+        self.assertGreater(self.window_of('clock').width, before * 1.9)
+
+
 class ScreenTests(DaemonCase):
     def test_a_resolution_change_lays_the_widgets_out_again(self):
         self.backend.screen = (900, 700)
@@ -273,7 +537,7 @@ class ScreenTests(DaemonCase):
     def test_high_dpi_scales_cells(self):
         small = self.daemon.grid.cell
         self.backend.scale = 2.0
-        self.daemon.rebuild_grid()
+        self.daemon.rebuild_screens()
         self.assertEqual(self.daemon.grid.cell, small * 2)
 
 

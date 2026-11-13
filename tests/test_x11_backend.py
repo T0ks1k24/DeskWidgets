@@ -818,6 +818,32 @@ class ScreenTests(X11TestCase):
         self.monitors(('left', '640/200x800/200+0+0'), ('*right', '640/200x800/200+640+0'))
         self.assertEqual(self.backend.work_area(), (640, 0, 640, 800))
 
+    def test_without_monitors_the_whole_screen_is_the_one_monitor(self):
+        found = self.backend.monitors()
+        self.assertEqual([(m.id, m.primary, m.rect) for m in found], [('screen', True, (0, 0, 1280, 800))])
+
+    @unittest.skipUnless(shutil.which('xrandr'), 'xrandr is not installed')
+    def test_every_monitor_is_listed_with_its_name_primary_first(self):
+        self.monitors(('left', '640/200x800/200+0+0'), ('*right', '640/200x800/200+640+0'))
+        found = self.backend.monitors()
+        self.assertEqual([(m.id, m.primary, m.rect) for m in found],
+                         [('right', True, (640, 0, 640, 800)), ('left', False, (0, 0, 640, 800))])
+        self.assertTrue(all(m.scale == 1.0 for m in found))
+
+    @unittest.skipUnless(shutil.which('xrandr'), 'xrandr is not installed')
+    def test_with_no_primary_marked_the_monitor_at_the_origin_is_the_primary(self):
+        self.monitors(('right', '640/200x800/200+640+0'), ('left', '640/200x800/200+0+0'))
+        self.assertEqual([(m.id, m.primary) for m in self.backend.monitors()], [('left', True), ('right', False)])
+
+    @unittest.skipUnless(shutil.which('xrandr'), 'xrandr is not installed')
+    def test_plugging_a_monitor_in_is_reported(self):
+        self.monitors(('*left', '640/200x800/200+0+0'))
+        changes = []
+        self.backend.on_screen_changed = lambda: changes.append([m.id for m in self.backend.monitors()])
+        self.start_loop()
+        self.monitors(('*left', '640/200x800/200+0+0'), ('right', '640/200x800/200+640+0'))
+        self.assertTrue(wait_until(lambda: changes and changes[-1] == ['left', 'right']))
+
     def monitors(self, *specs):
         env = {**os.environ, 'DISPLAY': SERVER.display}
         for name in ('left', 'right'):

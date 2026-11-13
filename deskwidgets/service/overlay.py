@@ -13,32 +13,43 @@ TARGET_STROKES = [((1, 1, 1, 0.85), 4.5), ((0.04, 0.52, 1.0, 1.0), 2.5)]
 
 
 class GridOverlay:
-    """A click-through window over the grid. It is redrawn only when the target cell changes."""
+    """A click-through window over the grid of one monitor: the one the dragged widget is over, so it moves
+    to another monitor when the widget does. It is redrawn only when the target cell changes."""
 
     def __init__(self, daemon):
         self.d = daemon
         self.window = None
+        self.monitor = None
         self.target = None
         self.origin = (0, 0)
 
     def show(self, instance):
         if not self.d.settings['show_grid'] or self.window is not None:
             return
-        grid = self.d.grid
+        self._open(instance.monitor)
+        self.update(instance, instance.window.position() or instance.requested)
+
+    def _open(self, monitor):
+        screen = self.d.screen_of(monitor)
+        grid = screen.grid
         width = grid.cols * grid.pitch - grid.gap + 2
         height = grid.rows * grid.pitch - grid.gap + 2
-        ox, oy = self.d.origin
+        ox, oy = screen.origin
         self.origin = (ox + grid.x0 - 1, oy + grid.y0 - 1)
+        self.monitor = screen.monitor.id
         self.window = self.d.backend.create_window('deskwidgets-grid', width, height, *self.origin, click_through=True)
         self.target = None
-        self.update(instance, instance.window.position() or instance.requested)
 
     def update(self, instance, pos):
         if self.window is None:
             return
         inst = instance.inst
-        col, row = self.d.nearest_cell(instance, pos)
-        spot = self.d.layout.grid.free_near(col, row, inst['size'], self.d.layout.taken(exclude=inst['id']))
+        monitor, col, row = self.d.nearest_cell(instance, pos)
+        if monitor != self.monitor:
+            self.window.close()
+            self._open(monitor)
+        spot = self.d.screen_of(monitor).grid.free_near(col, row, inst['size'],
+                                                        self.d.layout.taken(monitor, exclude=inst['id']))
         if spot == self.target:
             return
         self.target = spot
@@ -47,23 +58,23 @@ class GridOverlay:
     def hide(self):
         if self.window is not None:
             self.window.close()
-        self.window, self.target = None, None
+        self.window, self.monitor, self.target = None, None, None
 
     def _draw(self, size, spot):
-        grid = self.d.grid
+        grid = self.d.screen_of(self.monitor).grid
         width, height = self.window.width, self.window.height
         surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
         cr = cairo.Context(surface)
         radius = round(BASE_RADIUS * grid.scale)
-        taken = self.d.layout.taken()
+        taken = self.d.layout.taken(self.monitor)
+        target = self._target_cells(size, spot)
         for col in range(grid.cols):
             for row in range(grid.rows):
-                if (col, row) in taken and (col, row) not in self._target_cells(size, spot):
+                if (col, row) in taken and (col, row) not in target:
                     continue
                 self._cell(cr, 1 + col * grid.pitch, 1 + row * grid.pitch, grid.cell, grid.cell, radius,
                            CELL_FILL, CELL_STROKES)
         if spot is not None:
-            cw, ch = SIZES[size]
             self._cell(cr, 1 + spot[0] * grid.pitch, 1 + spot[1] * grid.pitch, *grid.card_px(size), radius,
                        TARGET_FILL, TARGET_STROKES)
         surface.flush()

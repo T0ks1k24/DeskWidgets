@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from deskwidgets.core import catalog, paths, settings
+from deskwidgets.core import monitors
 from deskwidgets.core.grid import Grid
 from deskwidgets.core.layout import Layout
 from deskwidgets.core.util import write_atomic
@@ -35,10 +36,23 @@ class SettingsTests(unittest.TestCase):
         with isolated_paths():
             paths.SETTINGS.write_text(json.dumps({'scale': 9, 'margin_top': -5, 'lock': 'yes', 'unknown': 1}))
             loaded = settings.load()
-            self.assertEqual(loaded['scale'], 2.0)
+            self.assertEqual(loaded['scale'], 1.2)   # widget size runs from 50 % to 120 %
             self.assertEqual(loaded['margin_top'], 0)
+            paths.SETTINGS.write_text(json.dumps({'scale': 0.1}))
+            self.assertEqual(settings.load()['scale'], 0.5)
             self.assertIs(loaded['lock'], settings.DEFAULTS['lock'])
             self.assertNotIn('unknown', loaded)
+
+    def test_monitors_must_be_a_list_of_names(self):
+        with isolated_paths():
+            self.assertEqual(settings.load()['monitors'], [])
+            paths.SETTINGS.write_text(json.dumps({'monitors': ['DP-1', 'HDMI-1']}))
+            self.assertEqual(settings.load()['monitors'], ['DP-1', 'HDMI-1'])
+            for bad in ('DP-1', [1, 2], ['DP-1', ''], {'DP-1': True}, None):
+                paths.SETTINGS.write_text(json.dumps({'monitors': bad}))
+                self.assertEqual(settings.load()['monitors'], [], bad)
+            settings.load()['monitors'].append('x')
+            self.assertEqual(settings.DEFAULTS['monitors'], [], 'the default list must not be shared')
 
     def test_corrupt_file_gives_defaults(self):
         with isolated_paths():
@@ -125,6 +139,38 @@ class GridTests(unittest.TestCase):
         tiny = Grid(300, 300, settings.DEFAULTS)
         self.assertGreaterEqual(tiny.cols, 2)
         self.assertGreaterEqual(tiny.rows, 2)
+
+
+class MonitorTests(unittest.TestCase):
+    LEFT = monitors.Monitor('DP-1', 0, 0, 1920, 1080, False)
+    RIGHT = monitors.Monitor('HDMI-1', 1920, 0, 1280, 720, True)
+    ABOVE = monitors.Monitor('DP-2', 0, -1080, 1920, 1080, False)
+
+    def test_primary_first_then_left_to_right_top_to_bottom(self):
+        self.assertEqual([m.id for m in monitors.ordered([self.LEFT, self.ABOVE, self.RIGHT])], ['HDMI-1', 'DP-2', 'DP-1'])
+
+    def test_select_picks_the_named_connected_monitors(self):
+        both = [self.LEFT, self.RIGHT]
+        self.assertEqual([m.id for m in monitors.select(both, ['DP-1', 'HDMI-1'])], ['HDMI-1', 'DP-1'])
+        self.assertEqual([m.id for m in monitors.select(both, ['DP-1'])], ['DP-1'])
+
+    def test_nothing_usable_selected_means_the_primary_monitor(self):
+        both = [self.LEFT, self.RIGHT]
+        for wanted in ([], ['DP-9'], None, 'DP-1', 5):
+            self.assertEqual([m.id for m in monitors.select(both, wanted)], ['HDMI-1'], wanted)
+        self.assertEqual([m.id for m in monitors.select([self.LEFT], [])], ['DP-1'])
+
+    def test_a_point_belongs_to_the_monitor_it_is_on_or_the_nearest(self):
+        both = [self.LEFT, self.RIGHT]
+        self.assertEqual(monitors.at_point(both, 100, 100).id, 'DP-1')
+        self.assertEqual(monitors.at_point(both, 2000, 100).id, 'HDMI-1')
+        self.assertEqual(monitors.at_point(both, 1919, 100).id, 'DP-1')
+        self.assertEqual(monitors.at_point(both, 5000, 900).id, 'HDMI-1')   # below and beyond the right one
+        self.assertEqual(monitors.at_point(both, -300, -300).id, 'DP-1')
+
+    def test_labels_say_the_size_and_which_is_primary(self):
+        self.assertEqual(monitors.label(self.LEFT), 'DP-1 · 1920×1080')
+        self.assertIn('primary', monitors.label(self.RIGHT).replace('головний', 'primary'))
 
 
 class LayoutTests(unittest.TestCase):
@@ -231,6 +277,130 @@ class LayoutTests(unittest.TestCase):
             layout.regrid(Grid(700, 500, settings.DEFAULTS))
             for inst in layout.instances:
                 self.assertTrue(layout.grid.fits(inst['col'], inst['row'], inst['size']))
+
+    # several monitors, each with its own grid
+    def two(self, second=None):
+        types = catalog.discover()
+        grids = {'DP-1': Grid(1920, 1080, settings.DEFAULTS), 'HDMI-1': second or Grid(1280, 720, settings.DEFAULTS)}
+        return Layout(grids, types, dict(settings.DEFAULTS))
+
+    def test_new_widgets_go_to_the_first_monitor_until_it_is_full(self):
+        with isolated_paths():
+            layout = self.two()
+            self.assertEqual(layout.add('clock')['monitor'], 'DP-1')
+            while layout.taken('DP-1') != {(c, r) for c in range(layout.grids['DP-1'].cols) for r in range(layout.grids['DP-1'].rows)}:
+                if layout.add('clock') is None:
+                    break
+            self.assertEqual(layout.add('clock')['monitor'], 'HDMI-1')
+            self.assertEqual(layout.add('clock', monitor='HDMI-1')['monitor'], 'HDMI-1')
+            self.assertEqual(layout.add('clock', monitor='nope')['monitor'], 'HDMI-1')   # an unknown name is ignored
+
+    def test_cells_are_per_monitor(self):
+        with isolated_paths():
+            layout = self.two()
+            a = layout.add('clock')
+            b = layout.add('clock', monitor='HDMI-1')
+            b['col'], b['row'] = a['col'], a['row']   # the same cell on another monitor is not a clash
+            self.assertFalse(layout.taken('HDMI-1', exclude=b['id']))
+            self.assertIn((a['col'], a['row']), layout.taken('DP-1'))
+            self.assertIn((b['col'], b['row']), layout.taken('HDMI-1'))
+
+    def test_move_between_monitors(self):
+        with isolated_paths():
+            layout = self.two()
+            inst = layout.add('clock')
+            spot = layout.move(inst['id'], 3, 2, monitor='HDMI-1')
+            self.assertEqual((inst['monitor'], (inst['col'], inst['row'])), ('HDMI-1', spot))
+            layout.move(inst['id'], 0, 0)   # no monitor: it stays where it is
+            self.assertEqual(inst['monitor'], 'HDMI-1')
+
+    def test_configure_moves_to_another_monitor_and_ignores_unknown_ones(self):
+        with isolated_paths():
+            layout = self.two()
+            inst = layout.add('clock')
+            layout.configure(inst['id'], {'monitor': 'HDMI-1'})
+            self.assertEqual(inst['monitor'], 'HDMI-1')
+            self.assertTrue(layout.grids['HDMI-1'].fits(inst['col'], inst['row'], inst['size']))
+            layout.configure(inst['id'], {'monitor': 'DP-9'})
+            self.assertEqual(inst['monitor'], 'HDMI-1')
+
+    def test_monitor_is_saved_and_loaded(self):
+        with isolated_paths():
+            layout = self.two()
+            inst = layout.add('clock', monitor='HDMI-1')
+            layout.save()
+            again = self.two()
+            again.load()
+            self.assertEqual(again.get(inst['id'])['monitor'], 'HDMI-1')
+            self.assertEqual((again.get(inst['id'])['col'], again.get(inst['id'])['row']), (inst['col'], inst['row']))
+
+    def test_a_layout_from_before_monitors_lands_on_the_first_one(self):
+        with isolated_paths():
+            paths.LAYOUT.write_text(json.dumps({'instances': [{'type': 'clock', 'col': 2, 'row': 1}]}))
+            layout = self.two()
+            layout.load()
+            self.assertEqual((layout.instances[0]['monitor'], layout.instances[0]['col'], layout.instances[0]['row']), ('DP-1', 2, 1))
+
+    def test_a_saved_monitor_that_is_not_there_any_more_means_the_first_one(self):
+        with isolated_paths():
+            paths.LAYOUT.write_text(json.dumps({'instances': [
+                {'type': 'clock', 'monitor': 'GONE-1', 'col': 2, 'row': 1}, {'type': 'clock', 'monitor': 7, 'col': 2, 'row': 1}]}))
+            layout = self.two()
+            layout.load()
+            self.assertEqual([i['monitor'] for i in layout.instances], ['DP-1', 'DP-1'])
+            self.assertNotEqual((layout.instances[0]['col'], layout.instances[0]['row']),
+                                (layout.instances[1]['col'], layout.instances[1]['row']))
+
+    def test_regrid_moves_widgets_of_a_removed_monitor_to_the_first_one(self):
+        with isolated_paths():
+            layout = self.two()
+            layout.add('clock', monitor='HDMI-1')
+            layout.add('clock', monitor='HDMI-1')
+            layout.regrid({'DP-1': Grid(1920, 1080, settings.DEFAULTS)})
+            self.assertEqual({i['monitor'] for i in layout.instances}, {'DP-1'})
+            cells = [c for i in layout.instances for c in Grid.cells(i['col'], i['row'], i['size'])]
+            self.assertEqual(len(cells), len(set(cells)))
+
+    def test_arrange_works_on_each_monitor(self):
+        with isolated_paths():
+            layout = self.two()
+            for _ in range(3):
+                layout.add('clock')
+                layout.add('clock', monitor='HDMI-1')
+            for inst in layout.instances:
+                inst['col'], inst['row'] = 4, 2
+            layout.arrange()
+            for monitor in layout.grids:
+                cells = [c for i in layout.instances if i['monitor'] == monitor for c in Grid.cells(i['col'], i['row'], i['size'])]
+                self.assertEqual(len(cells), len(set(cells)), monitor)
+            self.assertEqual({i['monitor'] for i in layout.instances}, {'DP-1', 'HDMI-1'})
+
+    # the widget size changes: the cells change size, the widgets keep their place on the screen
+    def test_regrid_after_a_size_change_keeps_places_and_edges(self):
+        with isolated_paths():
+            layout = self.make()
+            layout.load()
+            before = {i['id']: (i['col'], i['row']) for i in layout.instances}
+            right = [i['id'] for i in layout.instances if i['col'] + 2 >= layout.grid.cols]
+            for scale in (0.5, 1.2, 1.0):
+                layout.regrid(Grid(1920, 1080, {**settings.DEFAULTS, 'scale': scale}))
+                grid = layout.grid
+                cells = []
+                for inst in layout.instances:
+                    self.assertTrue(grid.fits(inst['col'], inst['row'], inst['size']), (scale, inst['id']))
+                    cells += list(Grid.cells(inst['col'], inst['row'], inst['size']))
+                self.assertEqual(len(cells), len(set(cells)), scale)
+                for inst_id in right:
+                    self.assertEqual(layout.get(inst_id)['col'] + 2, grid.cols, (scale, inst_id))
+            self.assertEqual({i['id']: (i['col'], i['row']) for i in layout.instances}, before)
+
+    def test_regrid_with_the_same_cells_changes_nothing(self):
+        with isolated_paths():
+            layout = self.make()
+            layout.load()
+            before = [(i['col'], i['row']) for i in layout.instances]
+            layout.regrid(Grid(1920, 1080, settings.DEFAULTS))
+            self.assertEqual([(i['col'], i['row']) for i in layout.instances], before)
 
     def test_unknown_types_stay_in_the_file_after_a_reload(self):
         with isolated_paths():

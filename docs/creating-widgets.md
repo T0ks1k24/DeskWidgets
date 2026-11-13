@@ -56,7 +56,7 @@ right on the card, so you see them immediately.
 | `id` | folder name, latin letters, digits and `_` |
 | `name`, `description` | string, or `{"uk": …, "en": …}` |
 | `category` | `time`, `info`, `system`, `anime`, `personal` or `other` — the section in the gallery |
-| `sizes` | any of `small` (1×1 cell), `medium` (2×1), `large` (2×2); **the first is the default** |
+| `sizes` | any of `small` (1×1 unit), `medium` (2×1), `large` (2×2); **the first is the default**. |
 | `interval` | seconds between redraws — keep it as large as the widget allows |
 | `fast_if` | a `bool` option that switches to 1-second updates when on (e.g. a seconds hand) |
 | `style`, `accent` | defaults for new copies (see [styles](#styles-and-colours)) |

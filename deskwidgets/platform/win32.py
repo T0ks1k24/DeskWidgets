@@ -25,6 +25,7 @@ from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
 
+from ..core.monitors import Monitor, ordered
 from ..core.util import log
 from .base import LEFT, MIDDLE, RIGHT, Backend, TimerQueue, Window
 
@@ -90,6 +91,7 @@ SM_CXSCREEN, SM_CYSCREEN, SM_CXSMICON, SM_CYSMICON = 0, 1, 49, 50
 LOGPIXELSX = 88
 MDT_EFFECTIVE_DPI = 0
 MONITOR_DEFAULTTOPRIMARY = 1
+MONITORINFOF_PRIMARY = 1
 PER_MONITOR_AWARE_V2 = -4    # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 is the handle value -4
 PROCESS_PER_MONITOR_DPI_AWARE = 2
 
@@ -145,6 +147,14 @@ class BITMAPINFO(ctypes.Structure):
 class WINDOWPOS(ctypes.Structure):
     _fields_ = [('hwnd', wt.HWND), ('hwndInsertAfter', wt.HWND), ('x', ctypes.c_int), ('y', ctypes.c_int),
                 ('cx', ctypes.c_int), ('cy', ctypes.c_int), ('flags', wt.UINT)]
+
+
+class MONITORINFOEXW(ctypes.Structure):
+    _fields_ = [('cbSize', wt.DWORD), ('rcMonitor', wt.RECT), ('rcWork', wt.RECT), ('dwFlags', wt.DWORD),
+                ('szDevice', ctypes.c_wchar * 32)]
+
+
+MONITORENUMPROC = _FUNCTYPE(wt.BOOL, wt.HANDLE, wt.HDC, ctypes.POINTER(wt.RECT), LPARAM)
 
 
 class ICONINFO(ctypes.Structure):
@@ -208,6 +218,8 @@ _USER32 = {
     'GetSystemMetrics': (ctypes.c_int, [ctypes.c_int]),
     'GetDoubleClickTime': (wt.UINT, []),
     'MonitorFromPoint': (wt.HANDLE, [wt.POINT, wt.DWORD]),
+    'EnumDisplayMonitors': (wt.BOOL, [wt.HDC, ctypes.POINTER(wt.RECT), MONITORENUMPROC, LPARAM]),
+    'GetMonitorInfoW': (wt.BOOL, [wt.HANDLE, ctypes.POINTER(MONITORINFOEXW)]),
     'SetProcessDPIAware': (wt.BOOL, []),
 }
 _USER32_OPTIONAL = {   # newer than Windows 7
@@ -947,14 +959,41 @@ class Win32Backend(Backend):
         return (0, 0, user32.GetSystemMetrics(SM_CXSCREEN), user32.GetSystemMetrics(SM_CYSCREEN))
 
     def dpi_scale(self):
-        return min(3.0, max(1.0, self._dpi() / 96))
+        return self._scale(self._dpi())
 
-    def _dpi(self):
-        """DPI of the primary monitor: its own current value first (it follows a change in Settings),
-        the system value as the fallback."""
+    @staticmethod
+    def _scale(dpi):
+        return min(3.0, max(1.0, dpi / 96))
+
+    def monitors(self):
+        """Every monitor with its own work area (the taskbar is left out) and DPI, the primary one first.
+        If Windows cannot enumerate them, the primary work area is the one monitor."""
+        user32 = self.api.user32
+        handles = []
+
+        def collect(monitor, _hdc, _rect, _lparam):
+            handles.append(monitor)
+            return True
+        callback = MONITORENUMPROC(collect)   # stays referenced until the enumeration is over
+        found = []
+        if user32.EnumDisplayMonitors(None, None, callback, 0):
+            for handle in handles:
+                info = MONITORINFOEXW()
+                info.cbSize = ctypes.sizeof(MONITORINFOEXW)
+                if not user32.GetMonitorInfoW(handle, ctypes.byref(info)):
+                    continue
+                work = info.rcWork
+                found.append(Monitor(info.szDevice or f'monitor{len(found) + 1}', work.left, work.top,
+                                     work.right - work.left, work.bottom - work.top,
+                                     bool(info.dwFlags & MONITORINFOF_PRIMARY), self._scale(self._dpi(handle))))
+        return ordered(found) if found else super().monitors()
+
+    def _dpi(self, monitor=None):
+        """DPI of a monitor (the primary one by default): its own current value first (it follows a change
+        in Settings), the system value as the fallback."""
         user32, shcore = self.api.user32, self.api.shcore
         if shcore.GetDpiForMonitor:
-            monitor = user32.MonitorFromPoint(wt.POINT(0, 0), MONITOR_DEFAULTTOPRIMARY)
+            monitor = monitor or user32.MonitorFromPoint(wt.POINT(0, 0), MONITOR_DEFAULTTOPRIMARY)
             dpi_x, dpi_y = wt.UINT(), wt.UINT()
             if monitor and shcore.GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, ctypes.byref(dpi_x),
                                                    ctypes.byref(dpi_y)) == 0 and dpi_x.value:
@@ -972,7 +1011,7 @@ class Win32Backend(Backend):
             user32.ReleaseDC(None, dc)
 
     def _screen_state(self):
-        return (self.work_area(), self.dpi_scale())
+        return self.monitors()
 
     def screen_changed(self):
         """Schedules `on_screen_changed`; several messages in a row make one call."""

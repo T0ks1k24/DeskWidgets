@@ -38,8 +38,9 @@ class NullWindow(Window):
 
 
 class NullBackend(Backend):
-    def __init__(self, screen=(1920, 1080), scale=1.0):
+    def __init__(self, screen=(1920, 1080), scale=1.0, monitors=None):
         self.screen, self.scale = screen, scale
+        self.monitor_list = monitors   # a list of Monitor; None = the one screen
         self.timers = TimerQueue()
         self.windows = []
         self._soon = []
@@ -76,6 +77,9 @@ class NullBackend(Backend):
 
     def dpi_scale(self):
         return self.scale
+
+    def monitors(self):
+        return list(self.monitor_list) if self.monitor_list else super().monitors()
 
     def create_window(self, title, width, height, x, y, click_through=False):
         window = NullWindow(title, width, height, x, y, click_through)

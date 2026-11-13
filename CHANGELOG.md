@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.1.0 — 2026-11-13
+
+* **Widget size is the only size setting**, 50 % to 120 % (it was 60 % – 200 % in the file and 80 % – 150 % in the
+  gallery). The grid follows it by itself, and every widget stays where it was on the screen when you change it.
+* The **Grid** group is gone from the gallery settings (spacing and margins): the grid follows the widget size on its own.
+  `gap` and the `margin_*` values stay in settings.json for anyone who needs them.
+* The settings page says when the **service is older than the gallery** (an upgrade does not restart it) and restarts it
+  with one button.
+* **Several monitors**: Settings → Monitors (`monitors` in settings.json) chooses the monitors that show widgets.
+  Each has its own grid (on Windows its own DPI scale too); drag a widget from one to another, or pick the monitor in its settings window.
+  `layout.json` gets a `monitor` per widget. Backends report every monitor (`Backend.monitors()`: XRandR on Linux,
+  `EnumDisplayMonitors` on Windows). The default is still the primary monitor only.
+* Fix: **right-clicking a widget did nothing** (Linux and Windows). It started `deskwidgets gallery --configure <id>`,
+  which the command line rejected, and the error was thrown away. The service now runs `deskwidgets configure <id>`,
+  `gallery --configure` is accepted as well, and errors of the gallery go to `gallery.log` next to `service.log`.
+* Fix: **the Windows gallery did not exist** (`gallery/tk_app.py` was referenced but never added), so the tray item,
+  the `Ctrl+Alt+W` hotkey and right click opened nothing on Windows. The Tk gallery is added: My widgets, Add,
+  Settings, and each widget's settings window with a live preview; it also serves Linux without GTK 4.
+* GNOME shortcut: the service points the gallery shortcut at itself on every start (a reinstall or a move left it
+  pointing at a Python that was gone, and the key silently did nothing; only the command is touched, never the key
+  you chose), every start of the gallery without a terminal leaves a line in `gallery.log`, and `deskwidgets doctor`
+  has a hotkey row.
+
 ## 3.0.0
 
 DeskWidgets no longer needs conky: widgets are drawn by DeskWidgets itself, which is what makes Windows possible.

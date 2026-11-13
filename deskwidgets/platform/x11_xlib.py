@@ -156,6 +156,7 @@ XLIB = {
     'XFlush': (i, [vp]),
     'XSync': (i, [vp, i]),
     'XFree': (i, [vp]),
+    'XGetAtomName': (vp, [vp, ul]),
     'XSetErrorHandler': (vp, [ERROR_HANDLER]),
 }
 XEXT = {

@@ -16,6 +16,8 @@ import threading
 import time
 from abc import ABC, abstractmethod
 
+from ..core.monitors import Monitor
+
 LEFT, MIDDLE, RIGHT = 1, 2, 3   # mouse buttons in `on_button`
 
 
@@ -101,7 +103,8 @@ class TimerQueue:
 class Backend(ABC):
     """The loop, the screen and the windows.
 
-    Set `on_screen_changed` (no arguments) to hear about a new resolution, work area or DPI."""
+    Set `on_screen_changed` (no arguments) to hear about a monitor that was plugged in, unplugged or changed
+    (resolution, work area, DPI)."""
 
     on_screen_changed = None
 
@@ -131,6 +134,12 @@ class Backend(ABC):
     def dpi_scale(self):
         """1.0 for 96 dpi, 1.5 for 144 dpi ... (the widgets are drawn that much larger)."""
         return 1.0
+
+    def monitors(self):
+        """Every connected monitor as a `core.monitors.Monitor`, the primary one first. A backend that cannot
+        tell reports the one screen `work_area()` describes."""
+        x, y, width, height = self.work_area()
+        return [Monitor('screen', x, y, width, height, True, self.dpi_scale())]
 
     # windows
     @abstractmethod
