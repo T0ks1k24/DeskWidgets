@@ -130,14 +130,21 @@ class ControlServer:
 
     def start(self):
         family, address = _family_and_address()
-        if not WINDOWS and Path(address).exists():
+        if WINDOWS or Path(address).exists():   # a named pipe has no file to look for: just try to connect
             try:
                 Client(address, family, authkey=_key()).close()
                 raise AlreadyRunning(address)
             except (OSError, AuthenticationError, EOFError, ServiceNotRunning):
-                Path(address).unlink(missing_ok=True)   # left behind by a crashed service
+                if not WINDOWS:
+                    Path(address).unlink(missing_ok=True)   # left behind by a crashed service
         paths.RUN.mkdir(parents=True, exist_ok=True)
-        self.listener = Listener(address, family, backlog=16, authkey=_key(create=True))
+        key = _key(create=True)   # after the check above: a refused second service must not overwrite the running one's key
+        try:
+            self.listener = Listener(address, family, backlog=16, authkey=key)
+        except PermissionError:
+            if not WINDOWS:
+                raise
+            raise AlreadyRunning(address) from None   # the pipe name is taken (FILE_FLAG_FIRST_PIPE_INSTANCE)
         self.thread = threading.Thread(target=self._serve, name='control', daemon=True)
         self.thread.start()
 
